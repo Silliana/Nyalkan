@@ -78,7 +78,8 @@ public class SwapChain extends Framebuffer {
             int presentMode = getPresentMode(surfaceProperties.presentModes);
             VkExtent2D extent = getExtent(surfaceProperties.capabilities);
 
-            if (extent.width() == 0 && extent.height() == 0) {
+            // minimized or settling window
+            if (extent.width() == 0 || extent.height() == 0) {
                 if (this.swapChainId != VK_NULL_HANDLE) {
                     this.swapChainImages.forEach(image -> vkDestroyImageView(device, image.getImageView(), null));
                     vkDestroySwapchainKHR(device, this.swapChainId, null);
@@ -87,6 +88,8 @@ public class SwapChain extends Framebuffer {
 
                 this.width = 0;
                 this.height = 0;
+                // avoid null image list
+                this.swapChainImages = new ArrayList<>();
                 return;
             }
 
@@ -125,6 +128,13 @@ public class SwapChain extends Framebuffer {
             createInfo.compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
             createInfo.presentMode(presentMode);
             createInfo.clipped(true);
+
+            if (DeviceManager.fullScreenExclusiveControl) {
+                VkSurfaceFullScreenExclusiveInfoEXT fullScreenExclusiveInfo = VkSurfaceFullScreenExclusiveInfoEXT.calloc(stack);
+                fullScreenExclusiveInfo.sType(EXTFullScreenExclusive.VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT);
+                fullScreenExclusiveInfo.fullScreenExclusive(EXTFullScreenExclusive.VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT);
+                createInfo.pNext(fullScreenExclusiveInfo.address());
+            }
 
             createInfo.oldSwapchain(this.swapChainId);
 
