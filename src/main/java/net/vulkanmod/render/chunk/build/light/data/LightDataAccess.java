@@ -108,7 +108,7 @@ public abstract class LightDataAccess {
             sl = world.getBrightness(LightLayer.SKY, pos);
         }
 
-        // FIX: Do not apply AO from blocks that emit light
+        // no ao from emitters
         float ao;
         if (lu == 0) {
             ao = state.getShadeBrightness(world, pos);

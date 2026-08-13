@@ -15,10 +15,6 @@ import java.nio.charset.StandardCharsets;
 @Mixin(Program.class)
 public class ProgramM {
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public static int compileShaderInternal(Program.Type type, String string, InputStream inputStream, String string2, GlslPreprocessor glslPreprocessor) throws IOException {
         String string3 = IOUtils.toString(inputStream, StandardCharsets.UTF_8);

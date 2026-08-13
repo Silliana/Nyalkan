@@ -11,9 +11,6 @@ import org.spongepowered.asm.mixin.Overwrite;
 @Mixin(Screenshot.class)
 public class ScreenshotRecorderM {
 
-    /**
-     * @author
-     */
     @Overwrite
     public static NativeImage takeScreenshot(RenderTarget target) {
         int width = target.width;

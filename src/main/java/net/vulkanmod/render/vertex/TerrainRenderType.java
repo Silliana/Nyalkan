@@ -41,6 +41,7 @@ public enum TerrainRenderType {
         return ((ExtendedRenderType)renderType).getTerrainRenderType();
     }
 
+
     public static TerrainRenderType get(String name) {
         return switch (name) {
             case "solid" -> TerrainRenderType.SOLID;

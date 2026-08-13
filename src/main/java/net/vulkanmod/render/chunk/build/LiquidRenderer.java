@@ -1,13 +1,12 @@
 package net.vulkanmod.render.chunk.build;
 
-import net.fabricmc.fabric.api.client.render.fluid.v1.FluidRenderHandler;
-import net.fabricmc.fabric.api.client.render.fluid.v1.FluidRenderHandlerRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
@@ -17,6 +16,7 @@ import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.vulkanmod.render.chunk.build.light.LightPipeline;
 import net.vulkanmod.render.chunk.build.light.data.QuadLightData;
 import net.vulkanmod.render.chunk.build.thread.BuilderResources;
@@ -88,10 +88,10 @@ public class LiquidRenderer {
     public void tessellate(BlockState blockState, FluidState fluidState, BlockPos blockPos, TerrainBufferBuilder vertexConsumer) {
         BlockAndTintGetter region = this.resources.region;
 
-        final FluidRenderHandler handler = getFluidRenderHandler(fluidState);
-        int color = handler.getFluidColor(region, blockPos, fluidState);
+        final IClientFluidTypeExtensions extensions = IClientFluidTypeExtensions.of(fluidState);
+        int color = extensions.getTintColor(fluidState, region, blockPos);
 
-        TextureAtlasSprite[] sprites = handler.getFluidSprites(region, blockPos, fluidState);
+        TextureAtlasSprite[] sprites = getFluidSprites(extensions, fluidState, region, blockPos);
 
         float r = ColorUtil.ARGB.unpackR(color);
         float g = ColorUtil.ARGB.unpackG(color);
@@ -322,14 +322,8 @@ public class LiquidRenderer {
                 continue;
 
             TextureAtlasSprite sprite = sprites[1];
+            // no overlay sprite
             boolean isOverlay = false;
-
-            if (sprites.length > 2) {
-                if (FluidRenderHandlerRegistry.INSTANCE.isBlockTransparent(adjState.getBlock())) {
-                    sprite = sprites[2];
-                    isOverlay = true;
-                }
-            }
 
             float u0 = sprite.getU(0.0F);
             float u1 = sprite.getU(0.5F);
@@ -356,15 +350,13 @@ public class LiquidRenderer {
         }
     }
 
-    private static FluidRenderHandler getFluidRenderHandler(FluidState fluidState) {
-        FluidRenderHandler handler = FluidRenderHandlerRegistry.INSTANCE.get(fluidState.getType());
-
-        // Fallback to water in case no handler was found
-        if (handler == null) {
-            handler = FluidRenderHandlerRegistry.INSTANCE.get(Fluids.WATER);
-        }
-
-        return handler;
+    private static TextureAtlasSprite[] getFluidSprites(IClientFluidTypeExtensions extensions, FluidState fluidState,
+                                                         BlockAndTintGetter region, BlockPos blockPos) {
+        var atlas = Minecraft.getInstance().getTextureAtlas(InventoryMenu.BLOCK_ATLAS);
+        return new TextureAtlasSprite[]{
+                atlas.apply(extensions.getStillTexture(fluidState, region, blockPos)),
+                atlas.apply(extensions.getFlowingTexture(fluidState, region, blockPos))
+        };
     }
 
     private float calculateAverageHeight(BlockAndTintGetter blockAndTintGetter, Fluid fluid, float f, float g, float h, BlockPos blockPos) {

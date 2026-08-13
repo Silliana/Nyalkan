@@ -53,6 +53,7 @@ public class ModelQuadFlags {
             case Z -> minX >= 0.0001f || minY >= 0.0001f || maxX <= 0.9999F || maxY <= 0.9999F;
         };
 
+        // epsilon not exact
         boolean parallel = switch(face.getAxis()) {
             case X -> minX == maxX;
             case Y -> minY == maxY;

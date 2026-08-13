@@ -40,10 +40,6 @@ public class PostPassM {
 
     @Shadow private Matrix4f shaderOrthoMatrix;
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void process(float f) {
         this.inTarget.unbindWrite();

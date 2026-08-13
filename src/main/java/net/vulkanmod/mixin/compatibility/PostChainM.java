@@ -252,10 +252,6 @@ public abstract class PostChainM {
 
     @Shadow protected abstract void setFilterMode(int i);
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void process(float f) {
         if (f < this.lastStamp) {

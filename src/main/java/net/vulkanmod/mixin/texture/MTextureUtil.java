@@ -15,18 +15,12 @@ import org.spongepowered.asm.mixin.Overwrite;
 @Mixin(TextureUtil.class)
 public class MTextureUtil {
 
-    /**
-     * @author
-     */
     @Overwrite(remap = false)
     public static int generateTextureId() {
         RenderSystem.assertOnRenderThreadOrInit();
         return GlTexture.genTextureId();
     }
 
-    /**
-     * @author
-     */
     @Overwrite(remap = false)
     public static void prepareImage(NativeImage.InternalGlFormat internalGlFormat, int id, int mipLevels, int width, int height) {
         RenderSystem.assertOnRenderThreadOrInit();

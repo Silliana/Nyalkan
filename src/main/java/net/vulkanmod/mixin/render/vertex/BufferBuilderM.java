@@ -117,9 +117,6 @@ public abstract class BufferBuilderM
         }
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void addVertex(float x, float y, float z, int color, float u, float v, int overlay, int light, float normalX, float normalY, float normalZ) {
         if (this.fastFormat) {

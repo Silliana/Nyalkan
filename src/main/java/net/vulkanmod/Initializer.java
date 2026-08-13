@@ -1,7 +1,9 @@
 package net.vulkanmod;
 
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLPaths;
 import net.vulkanmod.config.Config;
 import net.vulkanmod.config.Platform;
 import net.vulkanmod.config.video.VideoModeManager;
@@ -10,37 +12,36 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
 
-public class Initializer implements ClientModInitializer {
+@Mod(value = "vulkanmod", dist = Dist.CLIENT)
+public class Initializer {
 	public static final Logger LOGGER = LogManager.getLogger("VulkanMod");
 
 	private static String VERSION;
-	public static Config CONFIG;
 
-	@Override
-	public void onInitializeClient() {
+	// set before mod construction
+	public static final Config CONFIG;
 
-		VERSION = FabricLoader.getInstance()
-				.getModContainer("vulkanmod")
-				.get()
-				.getMetadata()
-				.getVersion().getFriendlyString();
-
-		LOGGER.info("== VulkanMod ==");
+	static {
+		System.setProperty("org.lwjgl.system.MemoryStack.SIZE", "1024K");
+		org.lwjgl.system.Configuration.STACK_SIZE.set(1024 * 1024);
 
 		Platform.init();
 		VideoModeManager.init();
 
-		var configPath = FabricLoader.getInstance()
-				.getConfigDir()
-				.resolve("vulkanmod_settings.json");
-
+		Path configPath = FMLPaths.CONFIGDIR.get().resolve("vulkanmod_settings.json");
 		CONFIG = loadConfig(configPath);
+	}
+
+	public Initializer(ModContainer modContainer) {
+		VERSION = modContainer.getModInfo().getVersion().toString();
+
+		LOGGER.info("== VulkanMod (NeoForge) ==");
 	}
 
 	private static Config loadConfig(Path path) {
 		Config config = Config.load(path);
 
-		if(config == null) {
+		if (config == null) {
 			config = new Config();
 			config.write();
 		}

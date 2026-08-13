@@ -19,9 +19,6 @@ public interface VertexConsumerM {
 
     @Shadow void addVertex(float f, float g, float h, int i, float j, float k, int l, int m, float n, float o, float p);
 
-    /**
-     * @author
-     */
     @Overwrite
     default void putBulkData(PoseStack.Pose matrixEntry, BakedQuad quad, float[] brightness, float red, float green, float blue, float alpha, int[] lights, int overlay, boolean useQuadColorData) {
         int[] js = quad.getVertices();

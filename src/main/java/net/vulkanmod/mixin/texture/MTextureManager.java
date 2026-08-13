@@ -17,9 +17,6 @@ public abstract class MTextureManager {
 
     @Shadow @Final private Set<Tickable> tickableTextures;
 
-    /**
-     * @author
-     */
     @Overwrite
     public void tick() {
         if (Renderer.skipRendering)

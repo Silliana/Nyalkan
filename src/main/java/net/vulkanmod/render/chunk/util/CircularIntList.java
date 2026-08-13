@@ -115,12 +115,7 @@ public class CircularIntList {
         @Override
         public Integer next() {
             currentIndex++;
-            try {
-                return list[currentIndex];
-            } catch (Exception e) {
-                e.printStackTrace();
-                throw new RuntimeException();
-            }
+            return list[currentIndex];
 
         }
 

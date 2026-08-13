@@ -59,9 +59,6 @@ public abstract class MNativeImage {
         }
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     private void _upload(int level, int xOffset, int yOffset, int unpackSkipPixels, int unpackSkipRows, int widthIn, int heightIn, boolean blur, boolean clamp, boolean mipmap, boolean autoClose) {
         RenderSystem.assertOnRenderThreadOrInit();
@@ -73,9 +70,6 @@ public abstract class MNativeImage {
         }
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void downloadTexture(int level, boolean removeAlpha) {
         RenderSystem.assertOnRenderThread();

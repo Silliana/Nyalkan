@@ -11,20 +11,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Uniform.class)
 public class UniformM {
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public static int glGetUniformLocation(int i, CharSequence charSequence) {
         //TODO
         return 1;
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public static int glGetAttribLocation(int i, CharSequence charSequence) {
         return 0;

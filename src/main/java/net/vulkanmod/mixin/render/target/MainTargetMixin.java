@@ -15,10 +15,6 @@ public class MainTargetMixin extends RenderTarget {
         super(useDepth);
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     private void createFrameBuffer(int width, int height) {
         this.viewWidth = width;

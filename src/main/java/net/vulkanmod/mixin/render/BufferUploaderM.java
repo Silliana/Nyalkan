@@ -17,15 +17,9 @@ import org.spongepowered.asm.mixin.Overwrite;
 @Mixin(BufferUploader.class)
 public class BufferUploaderM {
 
-    /**
-     * @author
-     */
     @Overwrite
     public static void reset() {}
 
-    /**
-     * @author
-     */
     @Overwrite
     public static void drawWithShader(MeshData meshData) {
         RenderSystem.assertOnRenderThread();
@@ -62,9 +56,6 @@ public class BufferUploaderM {
         meshData.close();
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public static void draw(MeshData meshData) {
         MeshData.DrawState parameters = meshData.drawState();

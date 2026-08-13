@@ -38,10 +38,6 @@ public abstract class SingleQuadParticleM extends Particle {
         this.quadSize = 0.1F * (this.random.nextFloat() * 0.5F + 0.5F) * 2.0F;
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void render(VertexConsumer vertexConsumer, Camera camera, float f) {
         double lx = (Mth.lerp(f, this.xo, this.x));
