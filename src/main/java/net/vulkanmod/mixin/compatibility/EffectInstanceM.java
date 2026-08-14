@@ -70,8 +70,8 @@ public class EffectInstanceM {
                     shift = At.Shift.AFTER),
             locals = LocalCapture.CAPTURE_FAILHARD
     )
-    private void inj(ResourceProvider resourceProvider, String string, CallbackInfo ci, ResourceLocation resourceLocation, Resource resource, Reader reader, JsonObject jsonObject, String string2, String string3) {
-        createShaders(resourceProvider, string2, string3);
+    private void inj(ResourceProvider resourceProvider, String string, CallbackInfo ci, ResourceLocation rl, ResourceLocation resourceLocation, Resource resource, Reader reader, JsonObject jsonObject, String s, String s1) {
+        createShaders(resourceProvider, s, s1);
     }
 
     @Redirect(method = "<init>", at = @At(value = "INVOKE",
@@ -80,10 +80,6 @@ public class EffectInstanceM {
         return null;
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void close() {
 
@@ -168,10 +164,6 @@ public class EffectInstanceM {
         return strings;
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void apply() {
         this.dirty = false;
@@ -205,10 +197,6 @@ public class EffectInstanceM {
 
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void clear() {
         RenderSystem.assertOnRenderThread();

@@ -164,6 +164,9 @@ public class GlTexture {
         if (target != GL11.GL_TEXTURE_2D)
             throw new UnsupportedOperationException("target != GL_TEXTURE_2D not supported");
 
+        if (boundTexture == null)
+            return;
+
         switch (pName) {
             case GL30.GL_TEXTURE_MAX_LEVEL -> boundTexture.setMaxLevel(param);
             case GL30.GL_TEXTURE_MAX_LOD -> boundTexture.setMaxLod(param);
@@ -245,6 +248,15 @@ public class GlTexture {
 
     public GlTexture(int id) {
         this.id = id;
+    }
+
+    public static void allocateTexture2D(int id, int width, int height, int internalFormat, int type) {
+        GlTexture texture = map.get(id);
+
+        if (texture == null)
+            throw new NullPointerException(String.format("Texture %d is null", id));
+
+        texture.allocateIfNeeded(width, height, internalFormat, type);
     }
 
     void allocateIfNeeded(int width, int height, int internalFormat, int type) {

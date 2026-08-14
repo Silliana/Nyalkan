@@ -1,5 +1,6 @@
 package net.vulkanmod.vulkan.shader;
 
+import net.vulkanmod.Initializer;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -63,7 +64,6 @@ public class SPIRVUtils {
             shaderc_compile_options_set_generate_debug_info(options);
 
         shaderc_compile_options_set_target_env(options, shaderc_env_version_vulkan_1_2, VK12.VK_API_VERSION_1_2);
-        shaderc_compile_options_set_include_callbacks(options, SHADER_INCLUDER, SHADER_RELEASER, pUserData);
 
         includePaths = new ObjectArrayList<>();
         addIncludePath("/assets/vulkanmod/shaders/include/");
@@ -72,22 +72,81 @@ public class SPIRVUtils {
     public static void addIncludePath(String path) {
         URL url = SPIRVUtils.class.getResource(path);
 
-        if(url != null)
-            includePaths.add(url.toExternalForm());
+        if (url != null) {
+            // union fs drops slash
+            String externalForm = url.toExternalForm();
+            includePaths.add(externalForm.endsWith("/") ? externalForm : externalForm + "/");
+        }
     }
 
     public static SPIRV compileShaderAbsoluteFile(String shaderFile, ShaderKind shaderKind) {
         try {
             String source = new String(Files.readAllBytes(Paths.get(new URI(shaderFile))));
+            // native include callback crashes
+            source = preprocessIncludes(source, new java.util.HashSet<>());
             return compileShader(shaderFile, source, shaderKind);
         } catch (IOException | URISyntaxException e) {
-            e.printStackTrace();
+            Initializer.LOGGER.error("Could not read shader {}", shaderFile, e);
         }
         return null;
     }
 
+    // recursive visited stops cycles
+    private static String preprocessIncludes(String source, java.util.Set<String> visited) {
+        StringBuilder result = new StringBuilder(source.length());
+
+        for (String line : source.split("\n", -1)) {
+            String trimmed = line.trim();
+
+            if (trimmed.startsWith("#include")) {
+                int firstQuote = trimmed.indexOf('"');
+                int lastQuote = trimmed.lastIndexOf('"');
+
+                // moj import uses brackets
+                if (firstQuote < 0) {
+                    firstQuote = trimmed.indexOf('<');
+                    lastQuote = trimmed.indexOf('>');
+                }
+
+                if (firstQuote >= 0 && lastQuote > firstQuote) {
+                    String includeName = trimmed.substring(firstQuote + 1, lastQuote);
+
+                    if (!visited.add(includeName)) {
+                        throw new RuntimeException("Circular #include detected: " + includeName);
+                    }
+
+                    result.append(preprocessIncludes(resolveInclude(includeName), visited)).append('\n');
+                    continue;
+                }
+            }
+
+            result.append(line).append('\n');
+        }
+
+        return result.toString();
+    }
+
+    private static String resolveInclude(String requested) {
+        for (String includePath : includePaths) {
+            try {
+                Path path = Paths.get(new URI(includePath + requested));
+
+                if (Files.exists(path)) {
+                    return new String(Files.readAllBytes(path));
+                }
+            } catch (URISyntaxException | IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        throw new RuntimeException("Unable to find " + requested + " in include paths");
+    }
+
     public static SPIRV compileShader(String filename, String source, ShaderKind shaderKind) {
         long startTime = System.nanoTime();
+
+        // mod shaders skip expansion
+        source = preprocessIncludes(source, new java.util.HashSet<>());
 
         long result = shaderc_compile_into_spv(compiler, source, shaderKind.kind, filename, "main", options);
 
@@ -113,9 +172,8 @@ public class SPIRVUtils {
 
             return new SPIRV(MemoryUtil.memAddress(buffer), buffer);
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("unable to read inputStream", e);
         }
-        throw new RuntimeException("unable to read inputStream");
     }
 
     public enum ShaderKind {
@@ -140,18 +198,20 @@ public class SPIRVUtils {
             var requesting = memASCII(requesting_source);
             var requested = memASCII(requested_source);
 
-            try(MemoryStack stack = MemoryStack.stackPush()) {
-                Path path;
+            // freed by releaser
+            try {
+                for (String includePath : includePaths) {
+                    Path path = Paths.get(new URI(String.format("%s%s", includePath, requested)));
 
-                for(String includePath : includePaths) {
-                    path = Paths.get(new URI(String.format("%s%s", includePath, requested)));
-
-                    if(Files.exists(path)) {
+                    if (Files.exists(path)) {
                         byte[] bytes = Files.readAllBytes(path);
 
-                        return ShadercIncludeResult.malloc(stack)
-                                .source_name(stack.ASCII(requested))
-                                .content(stack.bytes(bytes))
+                        ByteBuffer nameBuffer = MemoryUtil.memASCII(requested);
+                        ByteBuffer contentBuffer = MemoryUtil.memAlloc(bytes.length).put(bytes).flip();
+
+                        return ShadercIncludeResult.calloc()
+                                .source_name(nameBuffer)
+                                .content(contentBuffer)
                                 .user_data(user_data).address();
                     }
                 }
@@ -163,13 +223,14 @@ public class SPIRVUtils {
         }
     }
 
-    //TODO: Don't actually need the Releaser at all, (MemoryStack frees this for us)
-    //But ShaderC won't let us create the Includer without a corresponding Releaser, (so we need it anyway)
     private static class ShaderReleaser implements ShadercIncludeResultReleaseI {
 
         @Override
         public void invoke(long user_data, long include_result) {
-            //TODO:Maybe dump Shader Compiled Binaries here to a .Misc Diretcory to allow easy caching.recompilation...
+            ShadercIncludeResult result = ShadercIncludeResult.create(include_result);
+            MemoryUtil.memFree(result.source_name());
+            MemoryUtil.memFree(result.content());
+            MemoryUtil.nmemFree(include_result);
         }
     }
 

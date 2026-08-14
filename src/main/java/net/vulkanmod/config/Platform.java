@@ -11,10 +11,9 @@ public abstract class Platform {
     private static final String activeDE = determineDE();
 
     public static void init() {
-        GLFW.glfwInitHint(GLFW_PLATFORM, activePlat);
+        // fml already inited glfw
         LOGGER.info("Selecting Platform: {}", getStringFromPlat(activePlat));
         LOGGER.info("GLFW: {}", GLFW.glfwGetVersionString());
-        GLFW.glfwInit();
     }
 
     //Actually detect the currently active Display Server (if both Wayland and X11 are present on the system and/or GLFW is compiled to support both)

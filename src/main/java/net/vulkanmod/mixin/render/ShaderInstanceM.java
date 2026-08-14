@@ -67,10 +67,17 @@ public class ShaderInstanceM implements ShaderMixed {
         return pipeline;
     }
 
-    @Inject(method = "<init>", at = @At("RETURN"))
-    private void create(ResourceProvider resourceProvider, String name, VertexFormat format, CallbackInfo ci) {
+    @Inject(method = "<init>(Lnet/minecraft/server/packs/resources/ResourceProvider;Lnet/minecraft/resources/ResourceLocation;Lcom/mojang/blaze3d/vertex/VertexFormat;)V", at = @At("HEAD"))
+    private static void logAttempt(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format, CallbackInfo ci) {
+        Initializer.LOGGER.info("ShaderInstance construction attempt: {}", location);
+    }
+
+    @Inject(method = "<init>(Lnet/minecraft/server/packs/resources/ResourceProvider;Lnet/minecraft/resources/ResourceLocation;Lcom/mojang/blaze3d/vertex/VertexFormat;)V", at = @At("RETURN"))
+    private void create(ResourceProvider resourceProvider, ResourceLocation location, VertexFormat format, CallbackInfo ci) {
 
         try {
+            // colon breaks paths
+            String name = location.getPath();
             if (Pipeline.class.getResourceAsStream(String.format("/assets/vulkanmod/shaders/minecraft/core/%s/%s.json", name, name)) == null) {
                 createLegacyShader(resourceProvider, format);
                 return;
@@ -82,13 +89,12 @@ public class ShaderInstanceM implements ShaderMixed {
             pipelineBuilder.compileShaders();
             this.pipeline = pipelineBuilder.createGraphicsPipeline();
         } catch (Exception e) {
-            System.out.printf("Error on shader %s creation\n", name);
-            e.printStackTrace();
+            Initializer.LOGGER.error("Error on shader {} creation", name, e);
             throw e;
         }
     }
 
-    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/ShaderInstance;getOrCreate(Lnet/minecraft/server/packs/resources/ResourceProvider;Lcom/mojang/blaze3d/shaders/Program$Type;Ljava/lang/String;)Lcom/mojang/blaze3d/shaders/Program;"))
+    @Redirect(method = "<init>(Lnet/minecraft/server/packs/resources/ResourceProvider;Lnet/minecraft/resources/ResourceLocation;Lcom/mojang/blaze3d/vertex/VertexFormat;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/ShaderInstance;getOrCreate(Lnet/minecraft/server/packs/resources/ResourceProvider;Lcom/mojang/blaze3d/shaders/Program$Type;Ljava/lang/String;)Lcom/mojang/blaze3d/shaders/Program;"))
     private Program loadNames(ResourceProvider resourceProvider, Program.Type type, String name) {
         String path;
         if (this.name.contains(String.valueOf(ResourceLocation.NAMESPACE_SEPARATOR))) {
@@ -106,21 +112,15 @@ public class ShaderInstanceM implements ShaderMixed {
         return null;
     }
 
-    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;glBindAttribLocation(IILjava/lang/CharSequence;)V"))
+    @Redirect(method = "<init>(Lnet/minecraft/server/packs/resources/ResourceProvider;Lnet/minecraft/resources/ResourceLocation;Lcom/mojang/blaze3d/vertex/VertexFormat;)V", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;glBindAttribLocation(IILjava/lang/CharSequence;)V"))
     private void bindAttr(int program, int index, CharSequence name) {}
 
-    /**
-     * @author
-     */
     @Overwrite
     public void close() {
         if (this.pipeline != null)
             this.pipeline.cleanUp();
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void apply() {
         if (!this.isLegacy)
@@ -174,11 +174,11 @@ public class ShaderInstanceM implements ShaderMixed {
         if (this.LINE_WIDTH != null) {
             this.LINE_WIDTH.set(RenderSystem.getShaderLineWidth());
         }
+
+        // vanilla default uniforms
+        RenderSystem.setupShaderLights((ShaderInstance) (Object) this);
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void clear() {}
 
@@ -214,6 +214,7 @@ public class ShaderInstanceM implements ShaderMixed {
 
     private void createLegacyShader(ResourceProvider resourceProvider, VertexFormat format) {
         try {
+            Initializer.LOGGER.info("Converting legacy shader {} (vs={}, fs={})", this.name, this.vsPath, this.fsName);
             String vertPath = this.vsPath + ".vsh";
             Resource resource = resourceProvider.getResourceOrThrow(ResourceLocation.tryParse(vertPath));
             InputStream inputStream = resource.open();
@@ -236,10 +237,10 @@ public class ShaderInstanceM implements ShaderMixed {
 
             this.pipeline = builder.createGraphicsPipeline();
             this.isLegacy = true;
+            Initializer.LOGGER.info("Legacy shader {} converted OK, pipeline={}", this.name, this.pipeline);
 
         } catch (Exception e) {
-            Initializer.LOGGER.error("Error on shader {} conversion/compilation", this.name);
-            e.printStackTrace();
+            Initializer.LOGGER.error("Error on shader {} conversion/compilation", this.name, e);
         }
     }
 }

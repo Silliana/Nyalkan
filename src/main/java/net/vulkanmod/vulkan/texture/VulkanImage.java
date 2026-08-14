@@ -59,7 +59,8 @@ public class VulkanImage {
         this.usage = usage;
         this.aspect = getAspect(this.format);
 
-        this.sampler = SamplerManager.getTextureSampler((byte) this.mipLevels, (byte) 0);
+        // blur reads past edges
+        this.sampler = SamplerManager.getTextureSampler((byte) this.mipLevels, SamplerManager.CLAMP_BIT);
     }
 
     private VulkanImage(Builder builder) {
@@ -255,7 +256,6 @@ public class VulkanImage {
 
     public static void transitionImageLayout(MemoryStack stack, VkCommandBuffer commandBuffer, VulkanImage image, int newLayout) {
         if (image.currentLayout == newLayout) {
-//            System.out.println("new layout is equal to current layout");
             return;
         }
 

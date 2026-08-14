@@ -1,5 +1,6 @@
 package net.vulkanmod.mixin.render.target;
 
+import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -11,6 +12,7 @@ import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.util.DrawUtil;
+import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryStack;
 import org.spongepowered.asm.mixin.*;
@@ -37,9 +39,6 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
     boolean needClear = false;
     boolean bound = false;
 
-    /**
-     * @author
-     */
     @Overwrite
     public void clear(boolean getError) {
         RenderSystem.assertOnRenderThreadOrInit();
@@ -65,9 +64,6 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
         needClear = false;
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void bindRead() {
         RenderSystem.assertOnRenderThread();
@@ -82,18 +78,12 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
         }
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void unbindRead() {
         RenderSystem.assertOnRenderThreadOrInit();
         GlTexture.bindTexture(0);
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     private void _bindWrite(boolean bl) {
         RenderSystem.assertOnRenderThreadOrInit();
@@ -108,9 +98,6 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
             clear(false);
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void unbindWrite() {
         if (!RenderSystem.isOnRenderThread()) {
@@ -121,6 +108,37 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
         } else {
             GlStateManager._glBindFramebuffer(36160, 0);
             this.bound = false;
+        }
+    }
+
+    @Overwrite
+    public void destroyBuffers() {
+    }
+
+    @Overwrite
+    public void createBuffers(int width, int height, boolean clearError) {
+        this.viewWidth = width;
+        this.viewHeight = height;
+        this.width = width;
+        this.height = height;
+
+        this.frameBufferId = GlFramebuffer.genFramebufferId();
+        this.colorTextureId = GlTexture.genTextureId();
+        if (this.useDepth) {
+            this.depthBufferId = GlTexture.genTextureId();
+        }
+
+        //
+        if (!((Object) this instanceof MainTarget)) {
+            GlFramebuffer.bindFramebuffer(GL30.GL_FRAMEBUFFER, this.frameBufferId);
+
+            GlTexture.allocateTexture2D(this.colorTextureId, width, height, GL11.GL_RGBA8, GL11.GL_UNSIGNED_BYTE);
+            GlFramebuffer.framebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, this.colorTextureId, 0);
+
+            if (this.useDepth) {
+                GlTexture.allocateTexture2D(this.depthBufferId, width, height, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
+                GlFramebuffer.framebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D, this.depthBufferId, 0);
+            }
         }
     }
 

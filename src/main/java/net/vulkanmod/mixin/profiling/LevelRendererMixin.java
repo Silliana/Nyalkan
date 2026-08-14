@@ -29,7 +29,7 @@ public class LevelRendererMixin {
     }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;F)V",
+            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V",
             shift = At.Shift.BEFORE))
     private void pushProfiler3(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
         Profiler profiler = Profiler.getMainProfiler();
@@ -37,7 +37,7 @@ public class LevelRendererMixin {
     }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;F)V",
+            target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V",
             shift = At.Shift.AFTER))
     private void popProfiler3(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
         Profiler profiler = Profiler.getMainProfiler();
