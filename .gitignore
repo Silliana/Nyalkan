@@ -31,3 +31,8 @@ bin/
 # fabric
 
 run/
+
+# Local docs/notes/screenshots - not part of the tracked project
+/docs/
+.firecrawl/
+neoforge 26.x/
