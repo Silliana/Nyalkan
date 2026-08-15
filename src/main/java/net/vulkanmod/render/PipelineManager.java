@@ -14,14 +14,21 @@ import java.util.function.Function;
 import static net.vulkanmod.vulkan.shader.SPIRVUtils.compileShaderAbsoluteFile;
 
 public abstract class PipelineManager {
-    private static final String shaderPath = SPIRVUtils.class.getResource("/assets/vulkanmod/shaders/").toExternalForm();
+    // union fs drops slash
+    private static final String shaderPath = normalizeTrailingSlash(
+            SPIRVUtils.class.getResource("/assets/vulkanmod/shaders/").toExternalForm());
+
+    private static String normalizeTrailingSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
+    }
     public static VertexFormat TERRAIN_VERTEX_FORMAT;
 
     public static void setTerrainVertexFormat(VertexFormat format) {
         TERRAIN_VERTEX_FORMAT = format;
     }
 
-    static GraphicsPipeline terrainShaderEarlyZ, terrainShader, fastBlitPipeline;
+    static GraphicsPipeline terrainShaderEarlyZ, terrainShader, fastBlitPipeline, fastBlitPipelineNonInverted;
+    public static GraphicsPipeline particleInstancedPipeline;
 
     private static Function<TerrainRenderType, GraphicsPipeline> shaderGetter;
 
@@ -40,6 +47,19 @@ public abstract class PipelineManager {
         terrainShaderEarlyZ = createPipeline("terrain","terrain", "terrain_Z", TERRAIN_VERTEX_FORMAT);
         terrainShader = createPipeline("terrain", "terrain", "terrain", TERRAIN_VERTEX_FORMAT);
         fastBlitPipeline = createPipeline("blit", "blit", "blit", CustomVertexFormat.NONE);
+        fastBlitPipelineNonInverted = createPipeline("blit", "blit_noninverted", "blit", CustomVertexFormat.NONE);
+        particleInstancedPipeline = createInstancedPipeline("particle_instanced", CustomVertexFormat.PARTICLE_QUAD, CustomVertexFormat.PARTICLE_INSTANCE);
+    }
+
+    private static GraphicsPipeline createInstancedPipeline(String name, VertexFormat vertexFormat, VertexFormat instanceFormat) {
+        String path = String.format("basic/%s/%s", name, name);
+
+        Pipeline.Builder pipelineBuilder = new Pipeline.Builder(vertexFormat, path);
+        pipelineBuilder.setInstanceFormat(instanceFormat);
+        pipelineBuilder.parseBindingsJSON();
+        pipelineBuilder.compileShaders();
+
+        return pipelineBuilder.createGraphicsPipeline();
     }
 
     private static GraphicsPipeline createPipeline(String baseName, String vertName, String fragName,VertexFormat vertexFormat) {
@@ -75,9 +95,12 @@ public abstract class PipelineManager {
 
     public static GraphicsPipeline getFastBlitPipeline() { return fastBlitPipeline; }
 
+    public static GraphicsPipeline getFastBlitPipelineNonInverted() { return fastBlitPipelineNonInverted; }
+
     public static void destroyPipelines() {
         terrainShaderEarlyZ.cleanUp();
         terrainShader.cleanUp();
         fastBlitPipeline.cleanUp();
+        fastBlitPipelineNonInverted.cleanUp();
     }
 }

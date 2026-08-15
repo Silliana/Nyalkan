@@ -24,6 +24,7 @@ public class GraphicsPipeline extends Pipeline {
     private final Object2LongMap<PipelineState> graphicsPipelines = new Object2LongOpenHashMap<>();
 
     private final VertexFormat vertexFormat;
+    private final VertexFormat instanceFormat;
     private final VertexInputDescription vertexInputDescription;
 
     private long vertShaderModule = 0;
@@ -36,8 +37,9 @@ public class GraphicsPipeline extends Pipeline {
         this.imageDescriptors = builder.imageDescriptors;
         this.pushConstants = builder.pushConstants;
         this.vertexFormat = builder.vertexFormat;
+        this.instanceFormat = builder.instanceFormat;
 
-        this.vertexInputDescription = new VertexInputDescription(this.vertexFormat);
+        this.vertexInputDescription = new VertexInputDescription(this.vertexFormat, this.instanceFormat);
 
         createDescriptorSetLayout();
         createPipelineLayout();
@@ -104,6 +106,7 @@ public class GraphicsPipeline extends Pipeline {
 
             final int polygonMode = PipelineState.AssemblyRasterState.decodePolygonMode(state.assemblyRasterState);
             final int cullMode = PipelineState.AssemblyRasterState.decodeCullMode(state.assemblyRasterState);
+            final int frontFace = PipelineState.AssemblyRasterState.decodeFrontFace(state.assemblyRasterState);
 
             VkPipelineRasterizationStateCreateInfo rasterizer = VkPipelineRasterizationStateCreateInfo.calloc(stack);
             rasterizer.sType(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
@@ -112,7 +115,7 @@ public class GraphicsPipeline extends Pipeline {
             rasterizer.polygonMode(polygonMode);
             rasterizer.lineWidth(1.0f);
             rasterizer.cullMode(cullMode);
-            rasterizer.frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE);
+            rasterizer.frontFace(frontFace);
             rasterizer.depthBiasEnable(true);
 
             // ===> MULTISAMPLING <===
@@ -132,7 +135,19 @@ public class GraphicsPipeline extends Pipeline {
             depthStencil.depthBoundsTestEnable(false);
             depthStencil.minDepthBounds(0.0f); // Optional
             depthStencil.maxDepthBounds(1.0f); // Optional
-            depthStencil.stencilTestEnable(false);
+
+            // ref and masks dynamic
+            depthStencil.stencilTestEnable(PipelineState.StencilState.testEnable(state.stencilState_i));
+            VkStencilOpState stencilOpState = VkStencilOpState.calloc(stack)
+                    .failOp(PipelineState.StencilState.decodeFailOp(state.stencilState_i))
+                    .passOp(PipelineState.StencilState.decodePassOp(state.stencilState_i))
+                    .depthFailOp(PipelineState.StencilState.decodeDepthFailOp(state.stencilState_i))
+                    .compareOp(PipelineState.StencilState.decodeCompareOp(state.stencilState_i))
+                    .compareMask(0xFF)
+                    .writeMask(0xFF)
+                    .reference(0);
+            depthStencil.front(stencilOpState);
+            depthStencil.back(stencilOpState);
 
             // ===> COLOR BLENDING <===
 
@@ -165,9 +180,11 @@ public class GraphicsPipeline extends Pipeline {
             dynamicStates.sType(VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO);
 
             if (topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST || polygonMode == VK_POLYGON_MODE_LINE)
-                dynamicStates.pDynamicStates(stack.ints(VK_DYNAMIC_STATE_DEPTH_BIAS, VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_LINE_WIDTH));
+                dynamicStates.pDynamicStates(stack.ints(VK_DYNAMIC_STATE_DEPTH_BIAS, VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_LINE_WIDTH,
+                        VK_DYNAMIC_STATE_STENCIL_REFERENCE, VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK, VK_DYNAMIC_STATE_STENCIL_WRITE_MASK));
             else
-                dynamicStates.pDynamicStates(stack.ints(VK_DYNAMIC_STATE_DEPTH_BIAS, VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
+                dynamicStates.pDynamicStates(stack.ints(VK_DYNAMIC_STATE_DEPTH_BIAS, VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                        VK_DYNAMIC_STATE_STENCIL_REFERENCE, VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK, VK_DYNAMIC_STATE_STENCIL_WRITE_MASK));
 
             VkGraphicsPipelineCreateInfo.Buffer pipelineInfo = VkGraphicsPipelineCreateInfo.calloc(1, stack);
             pipelineInfo.sType(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO);
@@ -236,9 +253,33 @@ public class GraphicsPipeline extends Pipeline {
         final VkVertexInputAttributeDescription.Buffer attributeDescriptions;
         final VkVertexInputBindingDescription.Buffer bindingDescriptions;
 
-        VertexInputDescription(VertexFormat vertexFormat) {
-            this.bindingDescriptions = getBindingDescription(vertexFormat);
-            this.attributeDescriptions = getAttributeDescriptions(vertexFormat);
+        // optional instance binding
+        VertexInputDescription(VertexFormat vertexFormat, VertexFormat instanceFormat) {
+            if (instanceFormat == null) {
+                this.bindingDescriptions = getBindingDescription(vertexFormat, 0, VK_VERTEX_INPUT_RATE_VERTEX);
+                this.attributeDescriptions = getAttributeDescriptions(vertexFormat, 0, 0);
+                return;
+            }
+
+            VkVertexInputBindingDescription.Buffer vertexBinding = getBindingDescription(vertexFormat, 0, VK_VERTEX_INPUT_RATE_VERTEX);
+            VkVertexInputBindingDescription.Buffer instanceBinding = getBindingDescription(instanceFormat, 1, VK_VERTEX_INPUT_RATE_INSTANCE);
+            this.bindingDescriptions = VkVertexInputBindingDescription.calloc(2);
+            this.bindingDescriptions.put(0, vertexBinding.get(0));
+            this.bindingDescriptions.put(1, instanceBinding.get(0));
+            MemoryUtil.memFree(vertexBinding);
+            MemoryUtil.memFree(instanceBinding);
+
+            int vertexCount = vertexFormat.getElements().size();
+            int instanceCount = instanceFormat.getElements().size();
+            VkVertexInputAttributeDescription.Buffer vertexAttrs = getAttributeDescriptions(vertexFormat, 0, 0);
+            VkVertexInputAttributeDescription.Buffer instanceAttrs = getAttributeDescriptions(instanceFormat, 1, vertexCount);
+            this.attributeDescriptions = VkVertexInputAttributeDescription.calloc(vertexCount + instanceCount);
+            for (int i = 0; i < vertexCount; ++i)
+                this.attributeDescriptions.put(i, vertexAttrs.get(i));
+            for (int i = 0; i < instanceCount; ++i)
+                this.attributeDescriptions.put(vertexCount + i, instanceAttrs.get(i));
+            MemoryUtil.memFree(vertexAttrs);
+            MemoryUtil.memFree(instanceAttrs);
         }
 
         void cleanUp() {
@@ -247,17 +288,17 @@ public class GraphicsPipeline extends Pipeline {
         }
     }
 
-    private static VkVertexInputBindingDescription.Buffer getBindingDescription(VertexFormat vertexFormat) {
+    private static VkVertexInputBindingDescription.Buffer getBindingDescription(VertexFormat vertexFormat, int binding, int inputRate) {
         VkVertexInputBindingDescription.Buffer bindingDescription = VkVertexInputBindingDescription.calloc(1);
 
-        bindingDescription.binding(0);
+        bindingDescription.binding(binding);
         bindingDescription.stride(vertexFormat.getVertexSize());
-        bindingDescription.inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
+        bindingDescription.inputRate(inputRate);
 
         return bindingDescription;
     }
 
-    private static VkVertexInputAttributeDescription.Buffer getAttributeDescriptions(VertexFormat vertexFormat) {
+    private static VkVertexInputAttributeDescription.Buffer getAttributeDescriptions(VertexFormat vertexFormat, int binding, int startLocation) {
         List<VertexFormatElement> elements = vertexFormat.getElements();
 
         int size = elements.size();
@@ -268,8 +309,8 @@ public class GraphicsPipeline extends Pipeline {
 
         for (int i = 0; i < size; ++i) {
             VkVertexInputAttributeDescription posDescription = attributeDescriptions.get(i);
-            posDescription.binding(0);
-            posDescription.location(i);
+            posDescription.binding(binding);
+            posDescription.location(startLocation + i);
 
             VertexFormatElement formatElement = elements.get(i);
             VertexFormatElement.Usage usage = formatElement.usage();
@@ -350,6 +391,13 @@ public class GraphicsPipeline extends Pipeline {
                         posDescription.offset(offset);
 
                         offset += 4;
+                    }
+                    // mat4 instance rows
+                    else if (type == VertexFormatElement.Type.FLOAT && elementCount == 4) {
+                        posDescription.format(VK_FORMAT_R32G32B32A32_SFLOAT);
+                        posDescription.offset(offset);
+
+                        offset += 16;
                     }
                     else {
                         throw new RuntimeException(String.format("Unknown format: %s", usage));
