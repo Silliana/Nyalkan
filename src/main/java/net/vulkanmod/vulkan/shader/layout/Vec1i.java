@@ -24,6 +24,10 @@ public class Vec1i extends Uniform {
     }
 
     void update(long ptr) {
+        if (this.intSupplier == null) {
+            return;
+        }
+
         int i = this.intSupplier.get();
         MemoryUtil.memPutInt(ptr + this.offset, i);
     }

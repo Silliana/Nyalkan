@@ -24,6 +24,10 @@ public class Vec1f extends Uniform {
     }
 
     void update(long ptr) {
+        if (this.floatSupplier == null) {
+            return;
+        }
+
         float f = this.floatSupplier.get();
         MemoryUtil.memPutFloat(ptr + this.offset, f);
     }

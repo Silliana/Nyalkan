@@ -1,5 +1,6 @@
 package net.vulkanmod.config;
 
+import net.vulkanmod.Initializer;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.vulkanmod.config.video.VideoModeManager;
@@ -19,7 +20,7 @@ public class Config {
     public boolean windowedFullscreen = false;
 
     public int advCulling = 2;
-    public boolean indirectDraw = false;
+    public boolean indirectDraw = true;
 
     public boolean uniqueOpaqueLayer = true;
     public boolean entityCulling = true;
@@ -29,18 +30,11 @@ public class Config {
 
     public void write() {
 
-        if(!Files.exists(CONFIG_PATH.getParent())) {
-            try {
-                Files.createDirectories(CONFIG_PATH);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
         try {
+            Files.createDirectories(CONFIG_PATH.getParent());
             Files.write(CONFIG_PATH, Collections.singleton(GSON.toJson(this)));
         } catch (IOException e) {
-            e.printStackTrace();
+            Initializer.LOGGER.error("Could not save settings", e);
         }
     }
 
@@ -64,7 +58,8 @@ public class Config {
             }
         }
         else {
-            config = null;
+            config = new Config();
+            config.write();
         }
 
         return config;

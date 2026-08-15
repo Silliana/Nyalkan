@@ -40,6 +40,10 @@ public class Uniform {
     }
 
     void update(long ptr) {
+        if (this.values == null) {
+            return;
+        }
+
         MappedBuffer src = values.get();
 
         MemoryUtil.memCopy(src.ptr, ptr + this.offset, this.size);
