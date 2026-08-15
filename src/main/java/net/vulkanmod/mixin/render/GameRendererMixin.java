@@ -7,19 +7,21 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.datafixers.util.Pair;
-import net.fabricmc.fabric.api.client.rendering.v1.CoreShaderRegistrationCallback;
-import net.fabricmc.fabric.impl.client.rendering.FabricShaderProgram;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.server.packs.resources.ResourceProvider;
+import net.neoforged.fml.ModLoader;
+import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.io.IOException;
@@ -297,14 +299,8 @@ public abstract class GameRendererMixin {
                     Pair.of(new ShaderInstance(provider, "rendertype_energy_swirl", DefaultVertexFormat.NEW_ENTITY),
                     (shaderInstance) -> rendertypeBreezeWindShader = shaderInstance));
 
-            // FRAPI shader loading
-            CoreShaderRegistrationCallback.RegistrationContext context = (id, vertexFormat, loadCallback) -> {
-                ShaderInstance program = new FabricShaderProgram(provider, id, vertexFormat);
-                pairs.add(Pair.of(program, loadCallback));
-            };
-            CoreShaderRegistrationCallback.EVENT.invoker().registerShaders(context);
-
             this.loadBlurEffect(provider);
+            ModLoader.postEvent(new RegisterShadersEvent(provider, pairs));
         } catch (IOException ioexception) {
             pairs.forEach((pair) -> pair.getFirst().close());
             throw new RuntimeException("could not reload shaders", ioexception);
@@ -320,10 +316,6 @@ public abstract class GameRendererMixin {
         ci.cancel();
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     private void shutdownShaders() {
         RenderSystem.assertOnRenderThread();
@@ -334,10 +326,6 @@ public abstract class GameRendererMixin {
         this.shaders.clear();
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void preloadUiShader(ResourceProvider resourceProvider) {
         if (this.blitShader != null) {
@@ -360,14 +348,21 @@ public abstract class GameRendererMixin {
         }
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public float getDepthFar() {
 //        return this.getRenderDistance() * 4.0F;
         return Float.POSITIVE_INFINITY;
+    }
+
+    // vulkan depth range
+    @Redirect(method = "render", at = @At(value = "INVOKE", target = "Lorg/joml/Matrix4f;setOrtho(FFFFFF)Lorg/joml/Matrix4f;"))
+    private Matrix4f redirectGuiOrtho(Matrix4f instance, float left, float right, float bottom, float top, float zNear, float zFar) {
+        return instance.setOrtho(left, right, bottom, top, zNear, zFar, true);
+    }
+
+    @Redirect(method = "getProjectionMatrix", at = @At(value = "INVOKE", target = "Lorg/joml/Matrix4f;perspective(FFFF)Lorg/joml/Matrix4f;"))
+    private Matrix4f redirectWorldPerspective(Matrix4f instance, float fovy, float aspect, float zNear, float zFar) {
+        return instance.perspective(fovy, aspect, zNear, zFar, true);
     }
 
 }
