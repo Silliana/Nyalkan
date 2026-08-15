@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.util.GsonHelper;
+import net.neoforged.fml.loading.FMLPaths;
+import net.vulkanmod.Initializer;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.device.DeviceManager;
@@ -21,16 +23,20 @@ import net.vulkanmod.vulkan.shader.layout.PushConstants;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.apache.commons.lang3.Validate;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -47,11 +53,24 @@ public abstract class Pipeline {
     protected static final long PIPELINE_CACHE = createPipelineCache();
     protected static final List<Pipeline> PIPELINES = new LinkedList<>();
 
+    // driver validates cache header
+    private static Path getPipelineCacheFile() {
+        return FMLPaths.CONFIGDIR.get().resolve("vulkanmod_pipeline_cache.bin");
+    }
+
     private static long createPipelineCache() {
         try (MemoryStack stack = stackPush()) {
 
             VkPipelineCacheCreateInfo cacheCreateInfo = VkPipelineCacheCreateInfo.calloc(stack);
             cacheCreateInfo.sType(VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
+
+            try {
+                byte[] cacheData = Files.readAllBytes(getPipelineCacheFile());
+                ByteBuffer pInitialData = MemoryUtil.memAlloc(cacheData.length).put(cacheData).flip();
+                cacheCreateInfo.pInitialData(pInitialData);
+            } catch (IOException e) {
+                // first launch
+            }
 
             LongBuffer pPipelineCache = stack.mallocLong(1);
 
@@ -59,12 +78,42 @@ public abstract class Pipeline {
                 throw new RuntimeException("Failed to create graphics pipeline");
             }
 
+            if (cacheCreateInfo.pInitialData() != null)
+                MemoryUtil.memFree(cacheCreateInfo.pInitialData());
+
             return pPipelineCache.get(0);
         }
     }
 
     public static void destroyPipelineCache() {
+        savePipelineCache();
         vkDestroyPipelineCache(DEVICE, PIPELINE_CACHE, null);
+    }
+
+    private static void savePipelineCache() {
+        try (MemoryStack stack = stackPush()) {
+            PointerBuffer pDataSize = stack.mallocPointer(1);
+            if (vkGetPipelineCacheData(DEVICE, PIPELINE_CACHE, pDataSize, null) != VK_SUCCESS)
+                return;
+
+            long dataSize = pDataSize.get(0);
+            if (dataSize == 0)
+                return;
+
+            ByteBuffer pData = MemoryUtil.memAlloc((int) dataSize);
+            try {
+                if (vkGetPipelineCacheData(DEVICE, PIPELINE_CACHE, pDataSize, pData) != VK_SUCCESS)
+                    return;
+
+                byte[] bytes = new byte[(int) dataSize];
+                pData.get(bytes);
+                Files.write(getPipelineCacheFile(), bytes);
+            } finally {
+                MemoryUtil.memFree(pData);
+            }
+        } catch (IOException e) {
+            Initializer.LOGGER.warn("VulkanMod: failed to save pipeline cache to disk", e);
+        }
     }
 
     public static void recreateDescriptorSets(int frames) {
@@ -325,9 +374,6 @@ public abstract class Pipeline {
                 this.createDescriptorPool(stack);
                 this.createDescriptorSets(stack);
                 this.currentIdx = 0;
-
-                //debug
-//                System.out.println("resized descriptor pool to: " + this.poolSize);
             }
         }
 
@@ -490,6 +536,7 @@ public abstract class Pipeline {
         }
 
         final VertexFormat vertexFormat;
+        VertexFormat instanceFormat;
         final String shaderPath;
         List<UBO> UBOs;
         ManualUBO manualUBO;
@@ -509,6 +556,10 @@ public abstract class Pipeline {
 
         public Builder(VertexFormat vertexFormat) {
             this(vertexFormat, null);
+        }
+
+        public void setInstanceFormat(VertexFormat instanceFormat) {
+            this.instanceFormat = instanceFormat;
         }
 
         public GraphicsPipeline createGraphicsPipeline() {
@@ -533,7 +584,11 @@ public abstract class Pipeline {
         }
 
         public void compileShaders() {
+            // union fs drops slash
             String resourcePath = SPIRVUtils.class.getResource("/assets/vulkanmod/shaders/").toExternalForm();
+            if (!resourcePath.endsWith("/")) {
+                resourcePath += "/";
+            }
 
             this.vertShaderSPIRV = compileShaderAbsoluteFile(String.format("%s%s.vsh", resourcePath, this.shaderPath), ShaderKind.VERTEX_SHADER);
             this.fragShaderSPIRV = compileShaderAbsoluteFile(String.format("%s%s.fsh", resourcePath, this.shaderPath), ShaderKind.FRAGMENT_SHADER);
