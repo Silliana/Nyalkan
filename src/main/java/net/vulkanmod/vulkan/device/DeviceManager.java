@@ -37,6 +37,7 @@ public abstract class DeviceManager {
     public static VkPhysicalDeviceMemoryProperties memoryProperties;
 
     public static SurfaceProperties surfaceProperties;
+    public static boolean fullScreenExclusiveControl = false;
 
     static GraphicsQueue graphicsQueue;
     static PresentQueue presentQueue;
@@ -209,7 +210,21 @@ public abstract class DeviceManager {
 //                deviceVulkan13Features.pNext(deviceVulkan11Features.address());
             }
 
-            createInfo.ppEnabledExtensionNames(asPointerBuffer(Vulkan.REQUIRED_EXTENSION));
+            fullScreenExclusiveControl = false;
+            List<String> enabledExtensions = new ArrayList<>(Vulkan.REQUIRED_EXTENSION);
+            if (Vulkan.surfaceCapabilities2Supported) {
+                java.util.Set<String> availableExtensionNames = getAvailableExtension(stack, physicalDevice).stream()
+                        .map(VkExtensionProperties::extensionNameString)
+                        .collect(toSet());
+
+                if (availableExtensionNames.contains(EXTFullScreenExclusive.VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME)) {
+                    enabledExtensions.add(EXTFullScreenExclusive.VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME);
+                    fullScreenExclusiveControl = true;
+                    Initializer.LOGGER.info("VK_EXT_full_screen_exclusive enabled");
+                }
+            }
+
+            createInfo.ppEnabledExtensionNames(asPointerBuffer(enabledExtensions));
 
 //            Configuration.DEBUG_FUNCTIONS.set(true);
 
@@ -290,9 +305,10 @@ public abstract class DeviceManager {
                 {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT}
                 : new int[]{VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT};
 
+        // depth must be sampleable
         return findSupportedFormat(
                 VK_IMAGE_TILING_OPTIMAL,
-                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
                 formats);
     }
 
