@@ -115,7 +115,7 @@ public class UniformParser {
 
         for(StageUniforms stageUniforms : this.stageUniforms) {
             for(Uniform uniform : stageUniforms.samplers) {
-                int imageIdx = currentLocation - 1;
+                int imageIdx = net.vulkanmod.vulkan.texture.VTextureSelector.getTextureIdx(uniform.name);
                 imageDescriptors.add(new ImageDescriptor(currentLocation, uniform.type, uniform.name, imageIdx));
                 currentLocation++;
             }
