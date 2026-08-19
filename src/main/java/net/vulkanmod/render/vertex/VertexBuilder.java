@@ -1,5 +1,6 @@
 package net.vulkanmod.render.vertex;
 
+import net.vulkanmod.Initializer;
 import org.lwjgl.system.MemoryUtil;
 
 public interface VertexBuilder {
@@ -41,10 +42,20 @@ public interface VertexBuilder {
 
         public static final float UV_CONV_MUL = 32768.0f;
 
+        private static final boolean DEBUG_POS_OVERFLOW = Boolean.getBoolean("vulkanmod.debugPosOverflow");
+
         public void vertex(long ptr, float x, float y, float z, int color, float u, float v, int light, int packedNormal) {
-            final short sX = (short) (x * POS_CONV_MUL + POS_OFFSET_CONV);
-            final short sY = (short) (y * POS_CONV_MUL + POS_OFFSET_CONV);
-            final short sZ = (short) (z * POS_CONV_MUL + POS_OFFSET_CONV);
+            final float rawX = x * POS_CONV_MUL + POS_OFFSET_CONV;
+            final float rawY = y * POS_CONV_MUL + POS_OFFSET_CONV;
+            final float rawZ = z * POS_CONV_MUL + POS_OFFSET_CONV;
+
+            if (DEBUG_POS_OVERFLOW && (isOutOfShortRange(rawX) || isOutOfShortRange(rawY) || isOutOfShortRange(rawZ))) {
+                Initializer.LOGGER.warn("[POS_OVERFLOW] local=({},{},{}) packed=({},{},{})", x, y, z, rawX, rawY, rawZ);
+            }
+
+            final short sX = (short) rawX;
+            final short sY = (short) rawY;
+            final short sZ = (short) rawZ;
 
             MemoryUtil.memPutShort(ptr + 0, sX);
             MemoryUtil.memPutShort(ptr + 2, sY);
@@ -62,6 +73,10 @@ public interface VertexBuilder {
         @Override
         public int getStride() {
             return VERTEX_SIZE;
+        }
+
+        private static boolean isOutOfShortRange(float v) {
+            return v < Short.MIN_VALUE || v > Short.MAX_VALUE;
         }
     }
 

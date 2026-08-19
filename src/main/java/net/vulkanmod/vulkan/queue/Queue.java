@@ -145,15 +145,16 @@ public abstract class Queue {
 
                             if (i != indices.computeFamily)
                                 break;
+
                             fallback = i;
                         }
                     }
-
-                    if (fallback == -1)
-                        throw new RuntimeException("Failed to find queue family with transfer support");
-
-                    indices.transferFamily = fallback;
                 }
+
+                if (fallback == -1)
+                    throw new RuntimeException("Failed to find queue family with transfer support");
+
+                indices.transferFamily = fallback;
             }
 
             if (indices.computeFamily == -1) {

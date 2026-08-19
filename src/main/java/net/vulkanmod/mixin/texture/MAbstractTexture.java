@@ -7,6 +7,9 @@ import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AbstractTexture.class)
 public abstract class MAbstractTexture {
@@ -15,9 +18,6 @@ public abstract class MAbstractTexture {
 
     @Shadow protected int id;
 
-    /**
-     * @author
-     */
     @Overwrite
     public void bind() {
         if (!RenderSystem.isOnRenderThreadOrInit()) {
@@ -27,11 +27,8 @@ public abstract class MAbstractTexture {
         }
     }
 
-    /**
-     * @author
-     */
-    @Overwrite
-    public void setFilter(boolean blur, boolean mipmap) {
+    @Inject(method = "setFilter", at = @At("HEAD"), cancellable = true)
+    public void setFilter(boolean blur, boolean mipmap, CallbackInfo ci) {
         if (blur != this.blur || mipmap != this.mipmap) {
             this.blur = blur;
             this.mipmap = mipmap;
@@ -42,6 +39,8 @@ public abstract class MAbstractTexture {
             if (vulkanImage != null)
                 vulkanImage.updateTextureSampler(this.blur, false, this.mipmap);
         }
+
+        ci.cancel();
     }
 
     private void bindTexture() {

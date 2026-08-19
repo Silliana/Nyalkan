@@ -38,6 +38,7 @@ import java.util.Set;
 
 import static com.mojang.blaze3d.platform.GlConst.GL_COLOR_BUFFER_BIT;
 import static com.mojang.blaze3d.platform.GlConst.GL_DEPTH_BUFFER_BIT;
+import static org.lwjgl.opengl.GL11.GL_STENCIL_BUFFER_BIT;
 import static net.vulkanmod.vulkan.Vulkan.*;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
@@ -538,8 +539,18 @@ public class Renderer {
     public void bindGraphicsPipeline(GraphicsPipeline pipeline) {
         VkCommandBuffer commandBuffer = currentCmdBuffer;
 
+        // lazy main target bind
+        if (boundRenderPass == null) {
+            getMainPass().rebindMainTarget();
+        }
+
         PipelineState currentState = PipelineState.getCurrentPipelineState(boundRenderPass);
         final long handle = pipeline.getHandle(currentState);
+
+        // not baked into pipeline
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilRef);
+        vkCmdSetStencilCompareMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilFuncMask);
+        vkCmdSetStencilWriteMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilWriteMask);
 
         if (boundPipelineHandle == handle) {
             return;
@@ -579,6 +590,10 @@ public class Renderer {
         vkCmdSetDepthBias(commandBuffer, 0.0F, 0.0F, 0.0F);
 
         vkCmdSetLineWidth(commandBuffer, 1.0F);
+
+        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+        vkCmdSetStencilCompareMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
+        vkCmdSetStencilWriteMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
     }
 
     public static void setDepthBias(float units, float factor) {
@@ -608,36 +623,33 @@ public class Renderer {
             VkClearValue depthValue = VkClearValue.calloc(stack);
             depthValue.depthStencil().set(VRenderSystem.clearDepthValue, 0); //Use fast depth clears if possible
 
-            int attachmentsCount = v == (GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT) ? 2 : 1;
+            // only requested attachments
+            boolean clearColorBit = (v & GL_COLOR_BUFFER_BIT) != 0;
+            boolean clearDepthOrStencilBit = (v & (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)) != 0;
+
+            int attachmentsCount = (clearColorBit ? 1 : 0) + (clearDepthOrStencilBit ? 1 : 0);
+            if (attachmentsCount == 0)
+                return;
+
             final VkClearAttachment.Buffer pAttachments = VkClearAttachment.malloc(attachmentsCount, stack);
-            switch (v) {
-                case GL_DEPTH_BUFFER_BIT -> {
+            int idx = 0;
 
-                    VkClearAttachment clearDepth = pAttachments.get(0);
-                    clearDepth.aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT);
-                    clearDepth.colorAttachment(0);
-                    clearDepth.clearValue(depthValue);
-                }
-                case GL_COLOR_BUFFER_BIT -> {
+            if (clearColorBit) {
+                VkClearAttachment clearColor = pAttachments.get(idx++);
+                clearColor.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
+                clearColor.colorAttachment(0);
+                clearColor.clearValue(colorValue);
+            }
 
-                    VkClearAttachment clearColor = pAttachments.get(0);
-                    clearColor.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-                    clearColor.colorAttachment(0);
-                    clearColor.clearValue(colorValue);
-                }
-                case GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT -> {
+            if (clearDepthOrStencilBit) {
+                int aspectMask = 0;
+                if ((v & GL_DEPTH_BUFFER_BIT) != 0) aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+                if ((v & GL_STENCIL_BUFFER_BIT) != 0) aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
-                    VkClearAttachment clearColor = pAttachments.get(0);
-                    clearColor.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT);
-                    clearColor.colorAttachment(0);
-                    clearColor.clearValue(colorValue);
-
-                    VkClearAttachment clearDepth = pAttachments.get(1);
-                    clearDepth.aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT);
-                    clearDepth.colorAttachment(0);
-                    clearDepth.clearValue(depthValue);
-                }
-                default -> throw new RuntimeException("unexpected value");
+                VkClearAttachment clearDepth = pAttachments.get(idx);
+                clearDepth.aspectMask(aspectMask);
+                clearDepth.colorAttachment(0);
+                clearDepth.clearValue(depthValue);
             }
 
             //Rect to clear
@@ -656,9 +668,11 @@ public class Renderer {
 
     public static void setInvertedViewport(int x, int y, int width, int height) {
         setViewport(x, y + height, width, -height);
+        VRenderSystem.invertedViewport = true;
     }
 
     public static void setViewport(int x, int y, int width, int height) {
+        VRenderSystem.invertedViewport = false;
         try (MemoryStack stack = stackPush()) {
             setViewport(x, y, width, height, stack);
         }
@@ -680,6 +694,7 @@ public class Renderer {
     }
 
     public static void resetViewport() {
+        VRenderSystem.invertedViewport = false;
         try (MemoryStack stack = stackPush()) {
             int width = getSwapChain().getWidth();
             int height = getSwapChain().getHeight();

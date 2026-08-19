@@ -38,6 +38,11 @@ public class SectionGraph {
 
     private VFrustum frustum;
 
+    private RenderSection cameraSection;
+    private Vec3 lastCamPos;
+
+    private static final boolean DEBUG_CULL = Boolean.getBoolean("vulkanmod.debugCull");
+
     public RenderRegionBuilder renderRegionCache;
     int nonEmptyChunks;
 
@@ -57,6 +62,7 @@ public class SectionGraph {
         Profiler profiler = Profiler.getMainProfiler();
 
         BlockPos blockpos = camera.getBlockPosition();
+        this.lastCamPos = camera.getPosition();
 
         this.minecraft.getProfiler().popPush("update");
 
@@ -89,6 +95,8 @@ public class SectionGraph {
         Vec3 vec3 = camera.getPosition();
         BlockPos blockpos = camera.getBlockPosition();
         RenderSection renderSection = this.sectionGrid.getSectionAtBlockPos(blockpos);
+
+        this.cameraSection = renderSection;
 
         if (renderSection == null) {
             boolean flag = blockpos.getY() > this.level.getMinBuildHeight();
@@ -165,17 +173,22 @@ public class SectionGraph {
         while (this.sectionQueue.hasNext()) {
             RenderSection renderSection = this.sectionQueue.poll();
 
-            if (notInFrustum(renderSection))
+            if (notInFrustum(renderSection)) {
+                debugLogCull(renderSection, "notInFrustum");
                 continue;
+            }
 
-            if (renderSection.directionChanges > maxDirectionsChanges)
+            if (renderSection.directionChanges > maxDirectionsChanges) {
+                debugLogCull(renderSection, "directionChanges(" + renderSection.directionChanges + ">" + maxDirectionsChanges + ")");
                 continue;
+            }
 
             if (!renderSection.isCompletelyEmpty()) {
                 renderSection.getChunkArea().sectionQueue.add(renderSection);
-                this.chunkAreaQueue.add(renderSection.getChunkArea());
                 this.nonEmptyChunks++;
             }
+
+            this.chunkAreaQueue.add(renderSection.getChunkArea());
 
             if (renderSection.containsBlockEntities()) {
                 this.blockEntitiesSections.ensureCapacity(1);
@@ -197,13 +210,35 @@ public class SectionGraph {
         for (int i = 0; i < this.rebuildQueue.size(); i++) {
             RenderSection section = this.rebuildQueue.get(i);
 
-            section.rebuildChunkAsync(this.taskDispatcher, this.renderRegionCache);
-            section.setNotDirty();
+            // retry next frame
+            boolean scheduled = section.rebuildChunkAsync(this.taskDispatcher, this.renderRegionCache);
+            if (scheduled) {
+                section.setNotDirty();
+            }
         }
         this.rebuildQueue.clear();
     }
 
+    private void debugLogCull(RenderSection renderSection, String reason) {
+        if (!DEBUG_CULL || this.lastCamPos == null)
+            return;
+
+        double dx = (renderSection.xOffset + 8) - this.lastCamPos.x;
+        double dy = (renderSection.yOffset + 8) - this.lastCamPos.y;
+        double dz = (renderSection.zOffset + 8) - this.lastCamPos.z;
+        double distSq = dx * dx + dy * dy + dz * dz;
+
+        if (distSq < 24 * 24) {
+            Initializer.LOGGER.info("[CULL] section({},{},{}) dist={} reason={}",
+                    renderSection.xOffset, renderSection.yOffset, renderSection.zOffset,
+                    Math.sqrt(distSq), reason);
+        }
+    }
+
     private boolean notInFrustum(RenderSection renderSection) {
+        if (renderSection == this.cameraSection || isCameraNeighbor(renderSection))
+            return false;
+
         byte frustumRes = renderSection.getChunkArea().inFrustum(renderSection.frustumIndex);
         if (frustumRes > FrustumIntersection.INTERSECT) {
             return true;
@@ -212,6 +247,15 @@ public class SectionGraph {
                     renderSection.xOffset + 16, renderSection.yOffset + 16, renderSection.zOffset + 16);
         }
         return false;
+    }
+
+    private boolean isCameraNeighbor(RenderSection renderSection) {
+        if (this.cameraSection == null)
+            return false;
+
+        return renderSection == this.cameraSection.adjDown || renderSection == this.cameraSection.adjUp
+                || renderSection == this.cameraSection.adjNorth || renderSection == this.cameraSection.adjSouth
+                || renderSection == this.cameraSection.adjWest || renderSection == this.cameraSection.adjEast;
     }
 
     private void visitAdjacentNodes(RenderSection renderSection, byte dirs) {
@@ -255,9 +299,10 @@ public class SectionGraph {
 
             if (!renderSection.isCompletelyEmpty()) {
                 renderSection.getChunkArea().sectionQueue.add(renderSection);
-                this.chunkAreaQueue.add(renderSection.getChunkArea());
                 this.nonEmptyChunks++;
             }
+
+            this.chunkAreaQueue.add(renderSection.getChunkArea());
 
             if (renderSection.isDirty()) {
                 this.rebuildQueue.ensureCapacity(1);

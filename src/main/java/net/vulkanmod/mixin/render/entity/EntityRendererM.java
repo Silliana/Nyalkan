@@ -1,5 +1,6 @@
 package net.vulkanmod.mixin.render.entity;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.world.entity.Entity;
@@ -9,6 +10,7 @@ import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.RenderSection;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
@@ -40,7 +42,11 @@ public class EntityRendererM<T extends Entity> {
 //    }
 
     @Redirect(method = "shouldRender", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/culling/Frustum;isVisible(Lnet/minecraft/world/phys/AABB;)Z"))
-    private boolean isVisible(Frustum frustum, AABB aABB) {
+    private boolean isVisible(Frustum frustum, AABB aABB, T entity, Frustum frustum2, double d, double e, double f) {
+        if (entity == Minecraft.getInstance().getCameraEntity()) {
+            return frustum.isVisible(aABB);
+        }
+
         if(Initializer.CONFIG.entityCulling) {
             WorldRenderer worldRenderer = WorldRenderer.getInstance();
 

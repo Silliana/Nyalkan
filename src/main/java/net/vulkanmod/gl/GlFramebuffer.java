@@ -4,10 +4,12 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.vulkan.Renderer;
-import net.vulkanmod.vulkan.VRenderSystem;
+import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
+import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.texture.VulkanImage;
+import net.vulkanmod.vulkan.util.DrawUtil;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
@@ -19,6 +21,10 @@ public class GlFramebuffer {
     private static final Int2ReferenceOpenHashMap<GlFramebuffer> map = new Int2ReferenceOpenHashMap<>();
     private static int boundId = 0;
     private static GlFramebuffer boundFramebuffer;
+
+    // read target for blits
+    private static int readBoundId = 0;
+    private static GlFramebuffer readBoundFramebuffer;
 
     public static void resetBoundFramebuffer() {
         boundFramebuffer = null;
@@ -35,9 +41,6 @@ public class GlFramebuffer {
         Renderer.setInvertedViewport(0, 0, viewWidth, viewHeight);
         Renderer.setScissor(0, 0, viewWidth, viewHeight);
 
-        // TODO: invert cull instead of disabling
-        VRenderSystem.disableCull();
-
         boundId = glFramebuffer.id;
     }
 
@@ -49,9 +52,12 @@ public class GlFramebuffer {
     }
 
     public static void bindFramebuffer(int target, int id) {
-        // target
-        // 36160 GL_FRAMEBUFFER
-        // 36161 GL_RENDERBUFFER
+
+        if (target == GL30.GL_READ_FRAMEBUFFER) {
+            readBoundId = id;
+            readBoundFramebuffer = id == 0 ? null : map.get(id);
+            return;
+        }
 
         if (boundId == id)
             return;
@@ -66,19 +72,61 @@ public class GlFramebuffer {
 
             boundFramebuffer = null;
             boundId = 0;
+        } else {
+            GlFramebuffer glFramebuffer = map.get(id);
+
+            if (glFramebuffer == null)
+                throw new NullPointerException("No Framebuffer with ID: %d ".formatted(id));
+
+            if (glFramebuffer.framebuffer != null) {
+                beginRendering(glFramebuffer);
+            }
+
+            boundFramebuffer = glFramebuffer;
+            boundId = id;
+        }
+
+        // also binds read target
+        if (target == GL30.GL_FRAMEBUFFER) {
+            readBoundId = boundId;
+            readBoundFramebuffer = boundFramebuffer;
+        }
+    }
+
+    private static boolean isMainTarget(int id) {
+        return id == 0 || id == Minecraft.getInstance().getMainRenderTarget().frameBufferId;
+    }
+
+    // whole image colour copy
+    public static void blitFramebuffer(int mask) {
+        if ((mask & GL11.GL_COLOR_BUFFER_BIT) == 0)
             return;
+
+        VulkanImage src;
+        if (isMainTarget(readBoundId)) {
+            Renderer.getInstance().getMainPass().bindAsTexture();
+            src = Vulkan.getSwapChain().getColorAttachment();
+        } else {
+            if (readBoundFramebuffer == null)
+                return;
+
+            src = readBoundFramebuffer.colorAttachment;
+            if (src == null)
+                return;
         }
 
-        GlFramebuffer glFramebuffer = map.get(id);
+        if (isMainTarget(boundId)) {
+            Renderer.getInstance().getMainPass().rebindMainTarget();
+        } else {
+            GlFramebuffer dst = boundFramebuffer;
+            if (dst == null || dst.framebuffer == null)
+                return;
 
-        if (glFramebuffer == null)
-            throw new NullPointerException("No Framebuffer with ID: %d ".formatted(id));
-
-        if (glFramebuffer.framebuffer != null) {
-            beginRendering(glFramebuffer);
+            beginRendering(dst);
         }
 
-        boundFramebuffer = glFramebuffer;
+        VTextureSelector.bindTexture(0, src);
+        DrawUtil.blitToScreen(!isMainTarget(readBoundId));
     }
 
     public static void deleteFramebuffer(int id) {
@@ -96,6 +144,11 @@ public class GlFramebuffer {
     }
 
     public static void framebufferTexture2D(int target, int attachment, int texTarget, int texture, int level) {
+        // no stencil use depth
+        if (attachment == GL30.GL_STENCIL_ATTACHMENT || attachment == GL30.GL_DEPTH_STENCIL_ATTACHMENT) {
+            attachment = GL30.GL_DEPTH_ATTACHMENT;
+        }
+
         if (attachment != GL30.GL_COLOR_ATTACHMENT0 && attachment != GL30.GL_DEPTH_ATTACHMENT) {
             throw new UnsupportedOperationException();
         }

@@ -16,6 +16,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import net.vulkanmod.render.chunk.build.light.LightPipeline;
 import net.vulkanmod.render.chunk.build.light.data.QuadLightData;
 import net.vulkanmod.render.chunk.build.thread.BuilderResources;
@@ -31,6 +32,8 @@ import java.util.List;
 public class BlockRenderer {
 
     static final Direction[] DIRECTIONS = Direction.values();
+    private static final int OCCLUSION_CACHE_SIZE = 2048;
+    private static final byte UNKNOWN_FACE = 127;
     private static BlockColors blockColors;
 
     RandomSource randomSource = RandomSource.createNewThreadLocalInstance();
@@ -47,13 +50,13 @@ public class BlockRenderer {
         this.resources = resources;
     }
 
-    final Object2ByteLinkedOpenHashMap<Block.BlockStatePairKey> occlusionCache = new Object2ByteLinkedOpenHashMap<>(2048, 0.25F) {
+    final Object2ByteLinkedOpenHashMap<Block.BlockStatePairKey> occlusionCache = new Object2ByteLinkedOpenHashMap<>(OCCLUSION_CACHE_SIZE, 0.25F) {
         protected void rehash(int i) {
         }
     };
 
     public BlockRenderer() {
-        occlusionCache.defaultReturnValue((byte) 127);
+        occlusionCache.defaultReturnValue(UNKNOWN_FACE);
     }
 
     public static void setBlockColors(BlockColors blockColors) {
@@ -79,12 +82,17 @@ public class BlockRenderer {
         boolean useAO = Minecraft.useAmbientOcclusion() && blockState.getLightEmission() == 0 && bakedModel.useAmbientOcclusion();
         LightPipeline lightPipeline = useAO ? resources.smoothLightPipeline : resources.flatLightPipeline;
 
+        // main thread snapshot
+        ModelData modelData = resources.region.getModelData(blockPos);
+        // connected textures need this
+        modelData = bakedModel.getModelData(resources.region, blockPos, blockState, modelData);
+
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0; i < DIRECTIONS.length; ++i) {
             Direction direction = DIRECTIONS[i];
 
             randomSource.setSeed(seed);
-            List<BakedQuad> quads = bakedModel.getQuads(blockState, direction, randomSource);
+            List<BakedQuad> quads = bakedModel.getQuads(blockState, direction, randomSource, modelData, null);
 
             if (!quads.isEmpty()) {
                 mutableBlockPos.setWithOffset(blockPos, direction);
@@ -95,7 +103,7 @@ public class BlockRenderer {
         }
 
         randomSource.setSeed(seed);
-        List<BakedQuad> quads = bakedModel.getQuads(blockState, null, randomSource);
+        List<BakedQuad> quads = bakedModel.getQuads(blockState, null, randomSource, modelData, null);
         if (!quads.isEmpty()) {
             renderModelFace(bufferBuilder, quads, lightPipeline, null);
         }
@@ -125,10 +133,10 @@ public class BlockRenderer {
             b = 1.0F;
         }
 
-        putQuadData(bufferBuilder, pos, quadView, quadLightData, r, g, b);
+        writeQuad(bufferBuilder, pos, quadView, quadLightData, r, g, b);
     }
 
-    public static void putQuadData(TerrainBufferBuilder bufferBuilder, Vector3f pos, QuadView quad, QuadLightData quadLightData, float red, float green, float blue) {
+    private static void writeQuad(TerrainBufferBuilder bufferBuilder, Vector3f pos, QuadView quad, QuadLightData quadLightData, float red, float green, float blue) {
         Vec3i normal = quad.getFacingDirection().getNormal();
         int packedNormal = VertexUtil.packNormal(normal.getX(), normal.getY(), normal.getZ());
 
@@ -196,12 +204,12 @@ public class BlockRenderer {
             Block.BlockStatePairKey blockStatePairKey = new Block.BlockStatePairKey(blockState, adjBlockState, direction);
 
             byte b = occlusionCache.getAndMoveToFirst(blockStatePairKey);
-            if (b != 127) {
+            if (b != UNKNOWN_FACE) {
                 return b != 0;
             } else {
                 boolean bl = Shapes.joinIsNotEmpty(shape, adjShape, BooleanOp.ONLY_FIRST);
 
-                if (occlusionCache.size() == 2048) {
+                if (occlusionCache.size() == OCCLUSION_CACHE_SIZE) {
                     occlusionCache.removeLastByte();
                 }
 
