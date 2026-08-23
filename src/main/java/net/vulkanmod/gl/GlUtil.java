@@ -88,7 +88,8 @@ public abstract class GlUtil {
                         case GL11.GL_UNSIGNED_BYTE -> VK_FORMAT_R8_UNORM;
                         default -> throw new IllegalStateException("Unexpected type: " + type);
                     };
-            case GL11.GL_DEPTH_COMPONENT, GL30.GL_DEPTH_COMPONENT32F, GL30.GL_DEPTH_COMPONENT24 ->
+            case GL11.GL_DEPTH_COMPONENT, GL30.GL_DEPTH_COMPONENT32F, GL30.GL_DEPTH_COMPONENT24,
+                    GL30.GL_DEPTH32F_STENCIL8, GL30.GL_DEPTH24_STENCIL8 ->
 //                    switch (type) {
 //                        case GL11.GL_FLOAT -> VK_FORMAT_D32_SFLOAT;
 //                        default -> throw new IllegalStateException("Unexpected value: " + type);
@@ -103,7 +104,8 @@ public abstract class GlUtil {
     public static int vulkanFormat(int glInternalFormat) {
         return switch (glInternalFormat) {
             case GL30.GL_UNSIGNED_INT_8_8_8_8_REV -> VK_FORMAT_R8G8B8A8_UINT;
-            case GL11.GL_DEPTH_COMPONENT, GL30.GL_DEPTH_COMPONENT32F, GL30.GL_DEPTH_COMPONENT24 ->
+            case GL11.GL_DEPTH_COMPONENT, GL30.GL_DEPTH_COMPONENT32F, GL30.GL_DEPTH_COMPONENT24,
+                    GL30.GL_DEPTH32F_STENCIL8, GL30.GL_DEPTH24_STENCIL8 ->
 //                    switch (type) {
 //                        case GL11.GL_FLOAT -> VK_FORMAT_D32_SFLOAT;
 //                        default -> throw new IllegalStateException("Unexpected value: " + type);

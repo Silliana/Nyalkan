@@ -33,7 +33,21 @@ public abstract class VRenderSystem {
 
     public static int colorMask = PipelineState.ColorMask.getColorMask(true, true, true, true);
 
-    public static boolean cull = true;
+    // gl default off
+    public static boolean cull = false;
+
+    // non flipped offscreen viewport
+    public static boolean invertedViewport = false;
+
+    // gl stencil defaults
+    public static boolean stencilTest = false;
+    public static int stencilFunc = GL11.GL_ALWAYS;
+    public static int stencilRef = 0;
+    public static int stencilFuncMask = 0xFF;
+    public static int stencilWriteMask = 0xFF;
+    public static int stencilFail = GL11.GL_KEEP;
+    public static int stencilZFail = GL11.GL_KEEP;
+    public static int stencilZPass = GL11.GL_KEEP;
 
     public static boolean logicOp = false;
     public static int logicOpFun = 0;
@@ -219,6 +233,30 @@ public abstract class VRenderSystem {
 
     public static void depthFunc(int depthFun) {
         VRenderSystem.depthFun = depthFun;
+    }
+
+    public static void enableStencilTest() {
+        stencilTest = true;
+    }
+
+    public static void disableStencilTest() {
+        stencilTest = false;
+    }
+
+    public static void stencilFunc(int func, int ref, int mask) {
+        stencilFunc = func;
+        stencilRef = ref;
+        stencilFuncMask = mask;
+    }
+
+    public static void stencilMask(int mask) {
+        stencilWriteMask = mask;
+    }
+
+    public static void stencilOp(int sfail, int dpfail, int dppass) {
+        stencilFail = sfail;
+        stencilZFail = dpfail;
+        stencilZPass = dppass;
     }
 
     public static void enableBlend() {

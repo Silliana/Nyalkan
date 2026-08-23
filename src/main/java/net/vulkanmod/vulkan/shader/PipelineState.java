@@ -15,7 +15,7 @@ public class PipelineState {
 
     public static PipelineState.BlendInfo blendInfo = PipelineState.defaultBlendInfo();
 
-    public static final PipelineState DEFAULT = new PipelineState(getAssemblyRasterState(), getBlendState(), getDepthState(), getLogicOpState(), VRenderSystem.getColorMask(), null);
+    public static final PipelineState DEFAULT = new PipelineState(getAssemblyRasterState(), getBlendState(), getDepthState(), getLogicOpState(), VRenderSystem.getColorMask(), getStencilState(), null);
 
     public static PipelineState currentState = DEFAULT;
 
@@ -25,11 +25,12 @@ public class PipelineState {
         int currentColorMask = VRenderSystem.getColorMask();
         int depthState = getDepthState();
         int logicOp = getLogicOpState();
+        int stencilState = getStencilState();
 
-        if(currentState.checkEquals(assemblyRasterState, blendState, depthState, logicOp, currentColorMask, renderPass))
+        if(currentState.checkEquals(assemblyRasterState, blendState, depthState, logicOp, currentColorMask, stencilState, renderPass))
             return currentState;
         else
-            return currentState = new PipelineState(assemblyRasterState, blendState, depthState, logicOp, currentColorMask, renderPass);
+            return currentState = new PipelineState(assemblyRasterState, blendState, depthState, logicOp, currentColorMask, stencilState, renderPass);
     }
 
     public static int getBlendState() {
@@ -37,7 +38,7 @@ public class PipelineState {
     }
 
     public static int getAssemblyRasterState() {
-        return AssemblyRasterState.encode(VRenderSystem.cull, VRenderSystem.topology, VRenderSystem.polygonMode);
+        return AssemblyRasterState.encode(VRenderSystem.cull, VRenderSystem.invertedViewport, VRenderSystem.topology, VRenderSystem.polygonMode);
     }
 
     public static int getDepthState() {
@@ -49,6 +50,18 @@ public class PipelineState {
         depthState |= DepthState.encodeDepthFun(VRenderSystem.depthFun);
 
         return depthState;
+    }
+
+    public static int getStencilState() {
+        int stencilState = 0;
+
+        stencilState |= VRenderSystem.stencilTest ? StencilState.TEST_BIT : 0;
+        stencilState |= StencilState.encodeCompareOp(VRenderSystem.stencilFunc);
+        stencilState |= StencilState.encodeFailOp(VRenderSystem.stencilFail);
+        stencilState |= StencilState.encodeDepthFailOp(VRenderSystem.stencilZFail);
+        stencilState |= StencilState.encodePassOp(VRenderSystem.stencilZPass);
+
+        return stencilState;
     }
 
     public static int getLogicOpState() {
@@ -68,8 +81,9 @@ public class PipelineState {
     int depthState_i;
     int colorMask_i;
     int logicOp_i;
+    int stencilState_i;
 
-    public PipelineState(int assemblyRasterState, int blendState, int depthState, int logicOp, int colorMask, RenderPass renderPass) {
+    public PipelineState(int assemblyRasterState, int blendState, int depthState, int logicOp, int colorMask, int stencilState, RenderPass renderPass) {
         this.renderPass = renderPass;
 
         this.assemblyRasterState = assemblyRasterState;
@@ -77,13 +91,15 @@ public class PipelineState {
         this.depthState_i = depthState;
         this.colorMask_i = colorMask;
         this.logicOp_i = logicOp;
+        this.stencilState_i = stencilState;
     }
 
-    private boolean checkEquals(int assemblyRasterState, int blendState, int depthState, int logicOp, int colorMask, RenderPass renderPass) {
+    private boolean checkEquals(int assemblyRasterState, int blendState, int depthState, int logicOp, int colorMask, int stencilState, RenderPass renderPass) {
         return (blendState == this.blendState_i) && (depthState == this.depthState_i)
                 && renderPass == this.renderPass && logicOp == this.logicOp_i
                 && (assemblyRasterState == this.assemblyRasterState)
-                && colorMask == this.colorMask_i;
+                && colorMask == this.colorMask_i
+                && stencilState == this.stencilState_i;
     }
 
     @Override
@@ -97,12 +113,13 @@ public class PipelineState {
         return (blendState_i == that.blendState_i) && (depthState_i == that.depthState_i)
                 && this.renderPass == that.renderPass && logicOp_i == that.logicOp_i
                 && this.assemblyRasterState == that.assemblyRasterState
-                && this.colorMask_i == that.colorMask_i;
+                && this.colorMask_i == that.colorMask_i
+                && this.stencilState_i == that.stencilState_i;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(blendState_i, depthState_i, logicOp_i, assemblyRasterState, colorMask_i, renderPass);
+        return Objects.hash(blendState_i, depthState_i, logicOp_i, assemblyRasterState, colorMask_i, stencilState_i, renderPass);
     }
 
     public static BlendInfo defaultBlendInfo() {
@@ -125,6 +142,15 @@ public class PipelineState {
             this.srcAlphaFactor = srcAlphaFactor;
             this.dstAlphaFactor = dstAlphaFactor;
             this.blendOp = blendOp;
+        }
+
+        public void copyFrom(BlendInfo other) {
+            this.enabled = other.enabled;
+            this.srcRgbFactor = other.srcRgbFactor;
+            this.dstRgbFactor = other.dstRgbFactor;
+            this.srcAlphaFactor = other.srcAlphaFactor;
+            this.dstAlphaFactor = other.dstAlphaFactor;
+            this.blendOp = other.blendOp;
         }
 
         public void setBlendFunction(GlStateManager.SourceFactor sourceFactor, GlStateManager.DestFactor destFactor) {
@@ -316,9 +342,13 @@ public class PipelineState {
         public static final int CULL_MODE_BITS = 2;
         public static final int CULL_MODE_MASK = 0b11;
 
-        public static int encode(boolean cull, int topology, int polygonMode) {
+        // inverted viewport swaps winding
+        public static final int INVERTED_BIT_OFFSET = CULL_MODE_OFFSET + CULL_MODE_BITS;
+
+        public static int encode(boolean cull, boolean inverted, int topology, int polygonMode) {
             int state = (polygonMode | (topology << TOPOLOGY_OFFSET));
             state |= ((cull ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE) << CULL_MODE_OFFSET);
+            state |= (inverted ? 1 : 0) << INVERTED_BIT_OFFSET;
 
             return state;
         }
@@ -331,8 +361,18 @@ public class PipelineState {
             return state & POLYGON_MODE_MASK;
         }
 
+        private static final boolean DEBUG_NO_CULL = Boolean.getBoolean("vulkanmod.debugNoCull");
+
         public static int decodeCullMode(int state) {
+            if (DEBUG_NO_CULL)
+                return VK_CULL_MODE_NONE;
+
             return (state >>> CULL_MODE_OFFSET) & CULL_MODE_MASK;
+        }
+
+        public static int decodeFrontFace(int state) {
+            boolean inverted = ((state >>> INVERTED_BIT_OFFSET) & 1) != 0;
+            return inverted ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
         }
     }
 
@@ -345,6 +385,80 @@ public class PipelineState {
                     | (a ? VK_COLOR_COMPONENT_A_BIT : 0);
         }
 
+    }
+
+    public static abstract class StencilState {
+        public static final int TEST_BIT = 1;
+
+        public static final int COMPARE_OP_OFFSET = 1;
+        public static final int FAIL_OP_OFFSET = 4;
+        public static final int DEPTH_FAIL_OP_OFFSET = 7;
+        public static final int PASS_OP_OFFSET = 10;
+        public static final int OP_BITS = 0x7;
+
+        public static boolean testEnable(int i) {
+            return (i & TEST_BIT) != 0;
+        }
+
+        public static int encodeCompareOp(int glFun) {
+            return glToVulkanCompareOp(glFun) << COMPARE_OP_OFFSET;
+        }
+
+        public static int decodeCompareOp(int state) {
+            return (state >>> COMPARE_OP_OFFSET) & OP_BITS;
+        }
+
+        public static int encodeFailOp(int glOp) {
+            return glToVulkanStencilOp(glOp) << FAIL_OP_OFFSET;
+        }
+
+        public static int decodeFailOp(int state) {
+            return (state >>> FAIL_OP_OFFSET) & OP_BITS;
+        }
+
+        public static int encodeDepthFailOp(int glOp) {
+            return glToVulkanStencilOp(glOp) << DEPTH_FAIL_OP_OFFSET;
+        }
+
+        public static int decodeDepthFailOp(int state) {
+            return (state >>> DEPTH_FAIL_OP_OFFSET) & OP_BITS;
+        }
+
+        public static int encodePassOp(int glOp) {
+            return glToVulkanStencilOp(glOp) << PASS_OP_OFFSET;
+        }
+
+        public static int decodePassOp(int state) {
+            return (state >>> PASS_OP_OFFSET) & OP_BITS;
+        }
+
+        private static int glToVulkanCompareOp(int value) {
+            return switch (value) {
+                case 512 -> VK_COMPARE_OP_NEVER;
+                case 513 -> VK_COMPARE_OP_LESS;
+                case 514 -> VK_COMPARE_OP_EQUAL;
+                case 515 -> VK_COMPARE_OP_LESS_OR_EQUAL;
+                case 516 -> VK_COMPARE_OP_GREATER;
+                case 517 -> VK_COMPARE_OP_NOT_EQUAL;
+                case 518 -> VK_COMPARE_OP_GREATER_OR_EQUAL;
+                case 519 -> VK_COMPARE_OP_ALWAYS;
+                default -> throw new RuntimeException("unknown stencil func: " + value);
+            };
+        }
+
+        private static int glToVulkanStencilOp(int value) {
+            return switch (value) {
+                case 7680 -> VK_STENCIL_OP_KEEP; // GL_KEEP
+                case 0 -> VK_STENCIL_OP_ZERO; // GL_ZERO
+                case 7681 -> VK_STENCIL_OP_REPLACE; // GL_REPLACE
+                case 7682 -> VK_STENCIL_OP_INCREMENT_AND_CLAMP; // GL_INCR
+                case 7683 -> VK_STENCIL_OP_DECREMENT_AND_CLAMP; // GL_DECR
+                case 5386 -> VK_STENCIL_OP_INVERT; // GL_INVERT
+                case 34055 -> VK_STENCIL_OP_INCREMENT_AND_WRAP; // GL_INCR_WRAP
+                case 34056 -> VK_STENCIL_OP_DECREMENT_AND_WRAP; // GL_DECR_WRAP
+                default -> throw new RuntimeException("unknown stencil op: " + value);
+            };
+        }
     }
 
     public static abstract class DepthState {
@@ -374,12 +488,15 @@ public class PipelineState {
 
         private static int glToVulkan(int value) {
             return switch (value) {
+                case 512 -> VK_COMPARE_OP_NEVER;
+                case 513 -> VK_COMPARE_OP_LESS;
                 case 515 -> VK_COMPARE_OP_LESS_OR_EQUAL;
                 case 519 -> VK_COMPARE_OP_ALWAYS;
                 case 516 -> VK_COMPARE_OP_GREATER;
+                case 517 -> VK_COMPARE_OP_NOT_EQUAL;
                 case 518 -> VK_COMPARE_OP_GREATER_OR_EQUAL;
                 case 514 -> VK_COMPARE_OP_EQUAL;
-                default -> throw new RuntimeException("unknown blend factor..");
+                default -> throw new RuntimeException("unknown depth func: " + value);
 
 //                case 515 -> VK_COMPARE_OP_GREATER_OR_EQUAL;
 //                case 519 -> VK_COMPARE_OP_ALWAYS;

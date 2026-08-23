@@ -18,12 +18,15 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 public class DrawUtil {
 
     public static void blitToScreen() {
-//        defualtBlit();
-        fastBlit();
+        blitToScreen(true);
     }
 
-    public static void fastBlit() {
-        GraphicsPipeline blitPipeline = PipelineManager.getFastBlitPipeline();
+    public static void blitToScreen(boolean invertedUV) {
+        fastBlit(invertedUV);
+    }
+
+    public static void fastBlit(boolean invertedUV) {
+        GraphicsPipeline blitPipeline = invertedUV ? PipelineManager.getFastBlitPipeline() : PipelineManager.getFastBlitPipelineNonInverted();
 
         RenderSystem.disableCull();
         VRenderSystem.setPrimitiveTopologyGL(GL11.GL_TRIANGLES);
