@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk.build;
 
 import com.google.common.collect.Queues;
+import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.ChunkArea;
 import net.vulkanmod.render.chunk.ChunkAreaManager;
 import net.vulkanmod.render.chunk.RenderSection;
@@ -34,7 +35,10 @@ public class TaskDispatcher {
     }
 
     public void createThreads() {
-        int n = Math.max((Runtime.getRuntime().availableProcessors() - 1) / 2, 1);
+        // single thread compile
+        int n = Boolean.getBoolean("vulkanmod.singleThreadCompile")
+                ? 1
+                : Math.max((Runtime.getRuntime().availableProcessors() - 1) / 2, 1);
         createThreads(n);
     }
 
@@ -47,7 +51,7 @@ public class TaskDispatcher {
 
         if(this.resources != null) {
             for (BuilderResources resources : this.resources) {
-                resources.clear();
+                resources.free();
             }
         }
 
@@ -133,12 +137,17 @@ public class TaskDispatcher {
 
     }
 
+    // spread upload bursts
+    private static final int MAX_UPLOADS_PER_FRAME = 12;
+
     public boolean updateSections() {
         CompileResult result;
         boolean flag = false;
-        while((result = this.compileResults.poll()) != null) {
+        int processed = 0;
+        while(processed < MAX_UPLOADS_PER_FRAME && (result = this.compileResults.poll()) != null) {
             flag = true;
             doSectionUpdate(result);
+            processed++;
         }
 
         return flag;
@@ -155,8 +164,19 @@ public class TaskDispatcher {
 
         // Check if area has been dismissed before uploading
         ChunkAreaManager chunkAreaManager = WorldRenderer.getInstance().getChunkAreaManager();
-        if (chunkAreaManager.getChunkArea(renderArea.index) != renderArea)
+        if (chunkAreaManager.getChunkArea(renderArea.index) != renderArea) {
+            compileResult.renderedLayers.values().forEach(UploadBuffer::release);
             return;
+        }
+
+        // newer rebuild wins
+        if (compileResult.generation != -1 && compileResult.generation != section.getCompileGeneration()) {
+            Initializer.LOGGER.info("[STALE_COMPILE] discarded section({},{},{}) resultGen={} currentGen={}",
+                    section.xOffset(), section.yOffset(), section.zOffset(),
+                    compileResult.generation, section.getCompileGeneration());
+            compileResult.renderedLayers.values().forEach(UploadBuffer::release);
+            return;
+        }
 
         if(compileResult.fullUpdate) {
             var renderLayers = compileResult.renderedLayers;
