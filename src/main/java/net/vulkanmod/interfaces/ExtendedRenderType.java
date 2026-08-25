@@ -5,4 +5,6 @@ import net.vulkanmod.render.vertex.TerrainRenderType;
 public interface ExtendedRenderType {
 
     TerrainRenderType getTerrainRenderType();
+
+    String vulkanmod$getName();
 }

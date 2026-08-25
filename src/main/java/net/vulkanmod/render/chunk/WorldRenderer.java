@@ -24,6 +24,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.interfaces.ExtendedRenderType;
+import net.vulkanmod.render.CustomTerrainShaders;
 import net.vulkanmod.render.PipelineManager;
 import net.vulkanmod.render.chunk.buffer.DrawBuffers;
 import net.vulkanmod.render.chunk.build.BlockRenderer;
@@ -299,6 +301,18 @@ public class WorldRenderer {
 
     public void renderSectionLayer(RenderType renderType, double camX, double camY, double camZ, Matrix4f modelView, Matrix4f projection) {
         TerrainRenderType terrainRenderType = TerrainRenderType.get(renderType);
+        GraphicsPipeline customPipeline = null;
+
+        if (terrainRenderType == null) {
+            String name = ((ExtendedRenderType) renderType).vulkanmod$getName();
+            CustomTerrainShaders.Entry custom = name != null ? CustomTerrainShaders.get(name) : null;
+            if (custom == null) {
+                return;
+            }
+            terrainRenderType = custom.reuseBucket();
+            customPipeline = custom.pipeline().get();
+        }
+
         renderType.setupRenderState();
 
         this.sortTranslucentSections(camX, camY, camZ);
@@ -313,7 +327,7 @@ public class WorldRenderer {
         VRenderSystem.setPrimitiveTopologyGL(GL11.GL_TRIANGLES);
 
         Renderer renderer = Renderer.getInstance();
-        GraphicsPipeline pipeline = PipelineManager.getTerrainShader(terrainRenderType);
+        GraphicsPipeline pipeline = customPipeline != null ? customPipeline : PipelineManager.getTerrainShader(terrainRenderType);
         renderer.bindGraphicsPipeline(pipeline);
 
         VTextureSelector.bindShaderTextures(pipeline);

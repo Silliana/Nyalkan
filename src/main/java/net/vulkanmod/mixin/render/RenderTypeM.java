@@ -12,9 +12,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(RenderType.class)
 public class RenderTypeM implements ExtendedRenderType {
     TerrainRenderType terrainRenderType;
-    
+    private String name;
+
     @Inject(method = "<init>", at = @At("RETURN"))
     private void inj(String string, VertexFormat vertexFormat, VertexFormat.Mode mode, int i, boolean bl, boolean bl2, Runnable runnable, Runnable runnable2, CallbackInfo ci) {
+        name = string;
         terrainRenderType = switch (string) {
             case "solid" -> TerrainRenderType.SOLID;
             case "cutout" -> TerrainRenderType.CUTOUT;
@@ -24,9 +26,14 @@ public class RenderTypeM implements ExtendedRenderType {
             default -> null;
         };
     }
-    
+
     @Override
     public TerrainRenderType getTerrainRenderType() {
         return terrainRenderType;
+    }
+
+    @Override
+    public String vulkanmod$getName() {
+        return name;
     }
 }
