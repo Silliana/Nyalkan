@@ -64,20 +64,30 @@ public abstract class MipmapGeneratorM {
                     nativeImages2[j] = nativeImages[j];
                 } else {
                     NativeImage nativeImage = nativeImages2[j - 1];
-                    NativeImage nativeImage2 = new NativeImage(nativeImage.getWidth() >> 1, nativeImage.getHeight() >> 1, false);
-                    int width = nativeImage2.getWidth();
-                    int height = nativeImage2.getHeight();
+                    int srcWidth = nativeImage.getWidth();
+                    int srcHeight = nativeImage.getHeight();
+
+                    // dims clamp independently
+                    int width = Math.max(1, srcWidth >> 1);
+                    int height = Math.max(1, srcHeight >> 1);
+                    NativeImage nativeImage2 = new NativeImage(width, height, false);
 
                     srcPtr = ((NativeImageAccessor)(Object)nativeImage).getPixels();
                     long dstPtr = ((NativeImageAccessor)(Object)nativeImage2).getPixels();
-                    final int width2 = width * 2;
 
                     for(int m = 0; m < width; ++m) {
+                        // reuse clamped pixel
+                        int sx0 = Math.min(m * 2, srcWidth - 1);
+                        int sx1 = Math.min(m * 2 + 1, srcWidth - 1);
+
                         for(int n = 0; n < height; ++n) {
-                            int p0 = MemoryUtil.memGetInt(srcPtr + ((m * 2 + 0) + ((n * 2 + 0) * width2)) * 4L);
-                            int p1 = MemoryUtil.memGetInt(srcPtr + ((m * 2 + 1) + ((n * 2 + 0) * width2)) * 4L);
-                            int p2 = MemoryUtil.memGetInt(srcPtr + ((m * 2 + 0) + ((n * 2 + 1) * width2)) * 4L);
-                            int p3 = MemoryUtil.memGetInt(srcPtr + ((m * 2 + 1) + ((n * 2 + 1) * width2)) * 4L);
+                            int sy0 = Math.min(n * 2, srcHeight - 1);
+                            int sy1 = Math.min(n * 2 + 1, srcHeight - 1);
+
+                            int p0 = MemoryUtil.memGetInt(srcPtr + (sx0 + (long) sy0 * srcWidth) * 4L);
+                            int p1 = MemoryUtil.memGetInt(srcPtr + (sx1 + (long) sy0 * srcWidth) * 4L);
+                            int p2 = MemoryUtil.memGetInt(srcPtr + (sx0 + (long) sy1 * srcWidth) * 4L);
+                            int p3 = MemoryUtil.memGetInt(srcPtr + (sx1 + (long) sy1 * srcWidth) * 4L);
 
                             int outColor = blend(p0, p1, p2, p3);
                             MemoryUtil.memPutInt(dstPtr + (m + (long) n * width) * 4L, outColor);
