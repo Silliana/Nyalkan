@@ -48,18 +48,17 @@ public class LevelRendererM {
         this.managed = true;
     }
 
-    /**
-     * @author
-     * @reason
-     */
-    @Overwrite
-    private void renderEntity(Entity entity, double d, double e, double f, float partialTicks, PoseStack poseStack, MultiBufferSource multiBufferSource) {
-        if (!Initializer.CONFIG.entityCulling || !this.managed) {
+    @Inject(method = "renderEntity", at = @At("HEAD"), cancellable = true)
+    public void vulkanmod$renderEntity(Entity entity, double d, double e, double f, float partialTicks, PoseStack poseStack, MultiBufferSource multiBufferSource, CallbackInfo ci) {
+        // camera renders immediately
+        boolean isCamera = entity == Minecraft.getInstance().getCameraEntity();
+        if (!Initializer.CONFIG.entityCulling || !this.managed || isCamera) {
             double h = Mth.lerp(partialTicks, entity.xOld, entity.getX());
             double i = Mth.lerp(partialTicks, entity.yOld, entity.getY());
             double j = Mth.lerp(partialTicks, entity.zOld, entity.getZ());
             float k = Mth.lerp(partialTicks, entity.yRotO, entity.getYRot());
             this.entityRenderDispatcher.render(entity, h - d, i - e, j - f, k, partialTicks, poseStack, multiBufferSource, this.entityRenderDispatcher.getPackedLightCoords(entity, partialTicks));
+            ci.cancel();
             return;
         }
 
@@ -68,6 +67,7 @@ public class LevelRendererM {
         var entityMap = this.bufferSourceMap.computeIfAbsent(multiBufferSource, bufferSource -> new Object2ReferenceOpenHashMap<>());
         var list = entityMap.computeIfAbsent(entityClass, k -> new ObjectArrayList<>());
         list.add(entity);
+        ci.cancel();
     }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",

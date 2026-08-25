@@ -58,72 +58,42 @@ public abstract class LevelRendererMixin {
         this.worldRenderer.renderBlockEntities(poseStack, pos.x(), pos.y(), pos.z(), this.destructionProgress, deltaTracker.getGameTimeDeltaPartialTick(false));
     }
 
-    /**
-     * @author
-     * @reason
-     */
-    @Overwrite
-    private void setupRender(Camera camera, Frustum frustum, boolean isCapturedFrustum, boolean spectator) {
+    @Inject(method = "setupRender", at = @At("HEAD"), cancellable = true)
+    private void vulkanmod$setupRender(Camera camera, Frustum frustum, boolean isCapturedFrustum, boolean spectator, CallbackInfo ci) {
         this.worldRenderer.setupRenderer(camera, frustum, isCapturedFrustum, spectator);
+        ci.cancel();
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public boolean isSectionCompiled(BlockPos blockPos) {
         return this.worldRenderer.isSectionCompiled(blockPos);
     }
 
-    /**
-     * @author
-     * @reason
-     */
-    @Overwrite
-    private void renderSectionLayer(RenderType renderType, double camX, double camY, double camZ, Matrix4f modelView, Matrix4f projectionMatrix) {
+    @Inject(method = "renderSectionLayer", at = @At("HEAD"), cancellable = true)
+    private void vulkanmod$renderSectionLayer(RenderType renderType, double camX, double camY, double camZ, Matrix4f modelView, Matrix4f projectionMatrix, CallbackInfo ci) {
         this.worldRenderer.renderSectionLayer(renderType, camX, camY, camZ, modelView, projectionMatrix);
+        ci.cancel();
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public void onChunkLoaded(ChunkPos chunkPos) {
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     private void setSectionDirty(int x, int y, int z, boolean flag) {
         this.worldRenderer.setSectionDirty(x, y, z, flag);
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public String getSectionStatistics() {
         return this.worldRenderer.getChunkStatistics();
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public boolean hasRenderedAllSections() {
         return !this.worldRenderer.graphNeedsUpdate() && this.worldRenderer.getTaskDispatcher().isIdle();
     }
 
-    /**
-     * @author
-     * @reason
-     */
     @Overwrite
     public int countRenderedSections() {
         return this.worldRenderer.getVisibleSectionsCount();
