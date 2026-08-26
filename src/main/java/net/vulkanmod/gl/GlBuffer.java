@@ -18,6 +18,9 @@ public class GlBuffer {
     private static GlBuffer pixelPackBufferBound;
     private static GlBuffer pixelUnpackBufferBound;
 
+    // unsupported targets land here
+    private static final GlBuffer otherBufferBound = new GlBuffer(-1);
+
     public static int glGenBuffers() {
         int id = ID_COUNTER;
         map.put(id, new GlBuffer(id));
@@ -36,10 +39,11 @@ public class GlBuffer {
             glBuffer.target = target;
         }
 
+        // other targets ignored
         switch (target) {
             case GL32.GL_PIXEL_PACK_BUFFER -> pixelPackBufferBound = glBuffer;
             case GL32.GL_PIXEL_UNPACK_BUFFER -> pixelUnpackBufferBound = glBuffer;
-            default -> throw new IllegalStateException("Unexpected value: " + target);
+            default -> {}
         }
     }
 
@@ -55,7 +59,7 @@ public class GlBuffer {
         GlBuffer buffer = switch (target) {
             case GL32.GL_PIXEL_PACK_BUFFER -> pixelPackBufferBound;
             case GL32.GL_PIXEL_UNPACK_BUFFER -> pixelUnpackBufferBound;
-            default -> throw new IllegalStateException("Unexpected value: " + target);
+            default -> otherBufferBound;
         };
 
         buffer.allocate((int) size);
@@ -65,7 +69,7 @@ public class GlBuffer {
         GlBuffer buffer = switch (target) {
             case GL32.GL_PIXEL_PACK_BUFFER -> pixelPackBufferBound;
             case GL32.GL_PIXEL_UNPACK_BUFFER -> pixelUnpackBufferBound;
-            default -> throw new IllegalStateException("Unexpected value: " + target);
+            default -> otherBufferBound;
         };
 
         ByteBuffer mappedBuffer = buffer.data;

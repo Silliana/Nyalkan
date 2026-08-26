@@ -33,53 +33,33 @@ public class VertexBufferM {
         return 0;
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void bind() {}
 
-    /**
-     * @author
-     */
     @Overwrite
     public static void unbind() {}
 
-    /**
-     * @author
-     */
     @Overwrite
     public void upload(MeshData meshData) {
         vbo.upload(meshData);
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void uploadIndexBuffer(ByteBufferBuilder.Result result) {
         vbo.uploadIndexBuffer(result.byteBuffer());
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void drawWithShader(Matrix4f viewMatrix, Matrix4f projectionMatrix, ShaderInstance shader) {
         vbo.drawWithShader(viewMatrix, projectionMatrix, shader);
     }
 
-    /**
-     * @author
-     */
-    @Overwrite
-    public void draw() {
+    @Inject(method = "draw", at = @At("HEAD"), cancellable = true)
+    private void vulkanmod$draw(CallbackInfo ci) {
         vbo.draw();
+        ci.cancel();
     }
 
-    /**
-     * @author
-     */
     @Overwrite
     public void close() {
         vbo.close();
