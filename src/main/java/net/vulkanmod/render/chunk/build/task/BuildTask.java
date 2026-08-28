@@ -27,11 +27,13 @@ import org.joml.Vector3f;
 public class BuildTask extends ChunkTask {
     @Nullable
     protected RenderRegion region;
+    protected final int generation;
 
-    public BuildTask(RenderSection renderSection, RenderRegion renderRegion, boolean highPriority) {
+    public BuildTask(RenderSection renderSection, RenderRegion renderRegion, boolean highPriority, int generation) {
         super(renderSection);
         this.region = renderRegion;
         this.highPriority = highPriority;
+        this.generation = generation;
     }
 
     public String name() {
@@ -73,7 +75,7 @@ public class BuildTask extends ChunkTask {
     }
 
     private CompileResult compile(float camX, float camY, float camZ, BuilderResources builderResources) {
-        CompileResult compileResult = new CompileResult(this.section, true);
+        CompileResult compileResult = new CompileResult(this.section, true, this.generation);
 
         BlockPos startBlockPos = new BlockPos(section.xOffset(), section.yOffset(), section.zOffset()).immutable();
         VisGraph visGraph = new VisGraph();

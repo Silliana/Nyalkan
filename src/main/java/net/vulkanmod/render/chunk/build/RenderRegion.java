@@ -16,12 +16,14 @@ import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Function;
+import it.unimi.dsi.fastutil.longs.Long2ObjectFunction;
 
 public class RenderRegion implements BlockAndTintGetter {
     public static final int WIDTH = 3;
@@ -46,11 +48,14 @@ public class RenderRegion implements BlockAndTintGetter {
     private TintCache tintCache;
 
     private final Map<BlockPos, BlockEntity> blockEntityMap;
+    // main thread snapshot
+    private final Long2ObjectFunction<ModelData> modelDataSnapshot;
 
     private final Function<BlockPos, BlockState> blockStateGetter;
 
-    RenderRegion(Level level, int x, int y, int z, PalettedContainer<BlockState>[] blockData, DataLayer[][] lightData, Map<BlockPos, BlockEntity> blockEntityMap) {
+    RenderRegion(Level level, int x, int y, int z, PalettedContainer<BlockState>[] blockData, DataLayer[][] lightData, Map<BlockPos, BlockEntity> blockEntityMap, Long2ObjectFunction<ModelData> modelDataSnapshot) {
         this.level = level;
+        this.modelDataSnapshot = modelDataSnapshot;
 
         this.minSecX = x - 1;
         this.minSecY = y - 1;
@@ -181,6 +186,11 @@ public class RenderRegion implements BlockAndTintGetter {
     @Nullable
     public BlockEntity getBlockEntity(@NotNull BlockPos blockPos) {
         return this.blockEntityMap.get(blockPos);
+    }
+
+    // off thread safe
+    public ModelData getModelData(BlockPos blockPos) {
+        return this.modelDataSnapshot.get(blockPos.asLong());
     }
 
     public int getBlockTint(BlockPos blockPos, ColorResolver colorResolver) {

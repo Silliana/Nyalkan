@@ -64,7 +64,11 @@ public class RenderRegionBuilder {
             }
         }
 
-        return new RenderRegion(level, secX, secY, secZ, blockData, lightData, entityMap);
+        var modelDataSnapshot = level.getModelDataManager() != null
+                ? level.getModelDataManager().snapshotSectionRegion(minSecX, minSecY, minSecZ, maxSecX, maxSecY, maxSecZ)
+                : net.neoforged.neoforge.client.model.data.ModelDataManager.EMPTY_SNAPSHOT;
+
+        return new RenderRegion(level, secX, secY, secZ, blockData, lightData, entityMap, modelDataSnapshot);
     }
 
     private DataLayer[] getSectionDataLayers(Level level, SectionPos pos) {

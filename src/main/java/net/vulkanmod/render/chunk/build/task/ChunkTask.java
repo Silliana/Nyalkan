@@ -12,8 +12,8 @@ public abstract class ChunkTask {
 
     protected static TaskDispatcher taskDispatcher;
 
-    public static BuildTask createBuildTask(RenderSection renderSection, RenderRegion renderRegion, boolean highPriority) {
-        return new BuildTask(renderSection, renderRegion, highPriority);
+    public static BuildTask createBuildTask(RenderSection renderSection, RenderRegion renderRegion, boolean highPriority, int generation) {
+        return new BuildTask(renderSection, renderRegion, highPriority, generation);
     }
 
     protected AtomicBoolean cancelled = new AtomicBoolean(false);

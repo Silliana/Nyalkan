@@ -37,6 +37,8 @@ public class RenderSection {
             adjWest, adjEast;
 
     private final CompileStatus compileStatus = new CompileStatus();
+    // Drops stale async results
+    private volatile int compileGeneration = 0;
 
     private boolean dirty = true;
     private boolean playerChanged;
@@ -252,8 +254,17 @@ public class RenderSection {
         RenderRegion renderRegion = renderRegionCache.createRegion(level, secX, secY, secZ);
 
         boolean flag1 = this.compileStatus.compiledSection == CompiledSection.UNCOMPILED;
-        this.compileStatus.buildTask = ChunkTask.createBuildTask(this, renderRegion, !flag1 || flag);
+        this.compileStatus.buildTask = ChunkTask.createBuildTask(this, renderRegion, !flag1 || flag, this.nextCompileGeneration());
         return this.compileStatus.buildTask;
+    }
+
+    // Bumps compile generation
+    public int nextCompileGeneration() {
+        return ++this.compileGeneration;
+    }
+
+    public int getCompileGeneration() {
+        return this.compileGeneration;
     }
 
     protected boolean cancelTasks() {

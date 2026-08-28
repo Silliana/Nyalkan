@@ -215,9 +215,9 @@ public class DrawBuffers {
 
         public void reset(ChunkArea chunkArea, TerrainRenderType r) {
             AreaBuffer areaBuffer = chunkArea.getDrawBuffers().getAreaBuffer(r);
+            // setSegmentFree wants element offset
             if (areaBuffer != null && this.vertexOffset != -1) {
-                int segmentOffset = this.vertexOffset * VERTEX_SIZE;
-                areaBuffer.setSegmentFree(segmentOffset);
+                areaBuffer.setSegmentFree(this.vertexOffset);
             }
 
             this.indexCount = 0;

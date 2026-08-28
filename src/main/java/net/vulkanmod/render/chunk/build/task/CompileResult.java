@@ -15,6 +15,7 @@ import java.util.List;
 public class CompileResult {
     public final RenderSection renderSection;
     public final boolean fullUpdate;
+    public final int generation;
 
     final List<BlockEntity> globalBlockEntities = new ArrayList<>();
     final List<BlockEntity> blockEntities = new ArrayList<>();
@@ -25,8 +26,13 @@ public class CompileResult {
     CompiledSection compiledSection;
 
     CompileResult(RenderSection renderSection, boolean fullUpdate) {
+        this(renderSection, fullUpdate, -1);
+    }
+
+    CompileResult(RenderSection renderSection, boolean fullUpdate, int generation) {
         this.renderSection = renderSection;
         this.fullUpdate = fullUpdate;
+        this.generation = generation;
     }
 
     public void updateSection() {
