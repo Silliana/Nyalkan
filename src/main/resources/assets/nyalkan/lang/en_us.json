@@ -1,0 +1,40 @@
+{
+  "nyalkan.options.unknown": "Unknown",
+
+  "nyalkan.options.pages.video": "Video",
+  "nyalkan.options.pages.graphics": "Graphics",
+  "nyalkan.options.pages.optimizations": "Optimizations",
+  "nyalkan.options.pages.other": "Other",
+
+  "nyalkan.options.buttons.apply": "Apply",
+  "nyalkan.options.buttons.kofi": "Support me",
+
+  "nyalkan.options.advCulling": "Advanced Chunk Culling",
+  "nyalkan.options.advCulling.aggressive": "Aggressive",
+  "nyalkan.options.advCulling.conservative": "Conservative",
+  "nyalkan.options.advCulling.normal": "Normal",
+  "nyalkan.options.advCulling.tooltip": "Use a culling algorithm that might improve performance by reducing the number of non visible chunk sections rendered.",
+
+  "nyalkan.options.ao.subBlock": "ON (Sub-block)",
+  "nyalkan.options.ao.subBlock.tooltip": "ON (Sub-block): Enables smooth lighting for non full block (experimental).",
+
+  "nyalkan.options.deviceSelector": "Device selector",
+  "nyalkan.options.deviceSelector.auto": "Auto",
+  "nyalkan.options.deviceSelector.tooltip": "Current device",
+
+  "nyalkan.options.entityCulling": "Entity Culling",
+  "nyalkan.options.entityCulling.tooltip": "Enables culling for entities on not visible sections.",
+
+  "nyalkan.options.frameQueue": "Render queue size",
+  "nyalkan.options.frameQueue.tooltip": "Higher values might help stabilize frametime but will increase input lag.",
+
+  "nyalkan.options.indirectDraw": "Indirect Draw",
+  "nyalkan.options.indirectDraw.tooltip": "Reduces CPU overhead but increases GPU overhead. Enabling it might help in CPU limited systems.",
+
+  "nyalkan.options.refreshRate": "Refresh Rate",
+
+  "nyalkan.options.uniqueOpaqueLayer": "Unique opaque layer",
+  "nyalkan.options.uniqueOpaqueLayer.tooltip": "Use a unique render layer for opaque terrain to improve performance.",
+
+  "nyalkan.options.windowedFullscreen": "Windowed Fullscreen"
+}
