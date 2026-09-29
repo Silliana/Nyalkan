@@ -88,7 +88,8 @@ public abstract class LightDataAccess {
 
         boolean op;
         if(this.subBlockLighting)
-            op = state.canOcclude();
+            // must block light
+            op = state.canOcclude() && state.getLightBlock(world, pos) != 0;
         else
             op = state.isViewBlocking(world, pos) && state.getLightBlock(world, pos) != 0;
 
@@ -110,7 +111,7 @@ public abstract class LightDataAccess {
 
         // no ao from emitters
         float ao;
-        if (lu == 0) {
+        if (lu == 0 && state.getLightBlock(world, pos) != 0) {
             ao = state.getShadeBrightness(world, pos);
         } else {
             ao = 1.0f;
