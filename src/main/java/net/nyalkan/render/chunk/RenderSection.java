@@ -359,16 +359,18 @@ public class RenderSection {
     }
 
     public void updateGlobalBlockEntities(Collection<BlockEntity> fullSet) {
-        if (fullSet.isEmpty())
-            return;
-
-        Set<BlockEntity> set = Sets.newHashSet(fullSet);
-        Set<BlockEntity> set1;
         Set<BlockEntity> sectionSet;
         synchronized (globalBlockEntitiesMap) {
             sectionSet = globalBlockEntitiesMap.computeIfAbsent(this,
                     (section) -> new ObjectOpenHashSet<>());
         }
+
+        // removals still need clearing
+        if (fullSet.isEmpty() && sectionSet.isEmpty())
+            return;
+
+        Set<BlockEntity> set = Sets.newHashSet(fullSet);
+        Set<BlockEntity> set1;
 
         if (sectionSet.size() != fullSet.size() || !sectionSet.containsAll(fullSet)) {
             set1 = Sets.newHashSet(sectionSet);

@@ -55,9 +55,9 @@ public class ModelQuadFlags {
 
         // epsilon not exact
         boolean parallel = switch(face.getAxis()) {
-            case X -> minX == maxX;
-            case Y -> minY == maxY;
-            case Z -> minZ == maxZ;
+            case X -> Math.abs(minX - maxX) < 0.0001f;
+            case Y -> Math.abs(minY - maxY) < 0.0001f;
+            case Z -> Math.abs(minZ - maxZ) < 0.0001f;
         };
 
         boolean aligned = parallel && switch (face) {

@@ -551,6 +551,7 @@ public class Renderer {
         vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilRef);
         vkCmdSetStencilCompareMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilFuncMask);
         vkCmdSetStencilWriteMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilWriteMask);
+        vkCmdSetBlendConstants(commandBuffer, VRenderSystem.blendColor);
 
         if (boundPipelineHandle == handle) {
             return;
@@ -594,6 +595,7 @@ public class Renderer {
         vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0);
         vkCmdSetStencilCompareMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
         vkCmdSetStencilWriteMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
+        vkCmdSetBlendConstants(commandBuffer, new float[]{0.0f, 0.0f, 0.0f, 0.0f});
     }
 
     public static void setDepthBias(float units, float factor) {

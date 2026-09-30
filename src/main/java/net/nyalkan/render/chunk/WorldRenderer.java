@@ -414,6 +414,8 @@ public class WorldRenderer {
             List<BlockEntity> list = renderSection.getCompiledSection().getBlockEntities();
             if (!list.isEmpty()) {
                 for (BlockEntity blockEntity : list) {
+                    if (blockEntity.isRemoved()) continue;
+
                     BlockPos blockPos = blockEntity.getBlockPos();
                     MultiBufferSource bufferSource1 = bufferSource;
                     poseStack.pushPose();

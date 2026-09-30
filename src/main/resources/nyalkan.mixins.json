@@ -72,6 +72,10 @@
     "compat.ftb.GuiHelperM",
     "compat.ftb.GuiHelperScissorM",
 
+    "compat.cyclops.GuiHelpersM",
+
+    "compat.cucumber.ModRenderTypesM",
+
     "compat.veil.VeilDebugMixin",
     "compat.veil.VeilMultiBindMixin",
     "compat.veil.StagingBufferM",

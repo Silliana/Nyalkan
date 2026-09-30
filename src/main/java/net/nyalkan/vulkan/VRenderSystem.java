@@ -52,6 +52,8 @@ public abstract class VRenderSystem {
     public static boolean logicOp = false;
     public static int logicOpFun = 0;
 
+    public static float[] blendColor = {0.0f, 0.0f, 0.0f, 0.0f};
+
     public static float clearDepthValue = DEFAULT_DEPTH_VALUE;
     public static FloatBuffer clearColor = MemoryUtil.memCallocFloat(4);
 
@@ -265,6 +267,13 @@ public abstract class VRenderSystem {
 
     public static void disableBlend() {
         PipelineState.blendInfo.enabled = false;
+    }
+
+    public static void blendColor(float r, float g, float b, float a) {
+        blendColor[0] = r;
+        blendColor[1] = g;
+        blendColor[2] = b;
+        blendColor[3] = a;
     }
 
     public static void blendFunc(GlStateManager.SourceFactor sourceFactor, GlStateManager.DestFactor destFactor) {

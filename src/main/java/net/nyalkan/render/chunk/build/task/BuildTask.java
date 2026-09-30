@@ -130,13 +130,17 @@ public class BuildTask extends ChunkTask {
                     }
 
                     if (blockState.getRenderShape() == RenderShape.MODEL) {
-                        renderType = TerrainRenderType.get(ItemBlockRenderTypes.getChunkRenderType(blockState));
-
-                        bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
-                        bufferBuilder.setBlockAttributes(blockState);
-
                         pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
-                        blockRenderer.renderBlock(blockState, blockPos, pos, bufferBuilder);
+
+                        // one pass per type
+                        for (net.minecraft.client.renderer.RenderType modelRenderType : blockRenderer.prepareBlock(blockState, blockPos, pos)) {
+                            renderType = TerrainRenderType.get(modelRenderType);
+
+                            bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
+                            bufferBuilder.setBlockAttributes(blockState);
+
+                            blockRenderer.renderBlockPass(bufferBuilder, modelRenderType);
+                        }
                     }
                 }
             }

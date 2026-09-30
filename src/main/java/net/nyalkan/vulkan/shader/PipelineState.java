@@ -220,6 +220,13 @@ public class PipelineState {
                 case 769 -> VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
                 case 774 -> VK_BLEND_FACTOR_DST_COLOR;
                 case 768 -> VK_BLEND_FACTOR_SRC_COLOR;
+                case 772 -> VK_BLEND_FACTOR_DST_ALPHA;
+                case 773 -> VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+                case 776 -> VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+                case 32769 -> VK_BLEND_FACTOR_CONSTANT_COLOR;
+                case 32770 -> VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+                case 32771 -> VK_BLEND_FACTOR_CONSTANT_ALPHA;
+                case 32772 -> VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
                 default -> throw new RuntimeException("unknown blend factor: " + value);
 
 

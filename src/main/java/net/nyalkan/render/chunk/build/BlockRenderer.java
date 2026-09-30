@@ -3,6 +3,8 @@ package net.nyalkan.render.chunk.build;
 import it.unimi.dsi.fastutil.objects.Object2ByteLinkedOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
@@ -16,6 +18,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.neoforge.client.ChunkRenderTypeSet;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.nyalkan.render.chunk.build.light.LightPipeline;
 import net.nyalkan.render.chunk.build.light.data.QuadLightData;
@@ -46,6 +49,13 @@ public class BlockRenderer {
 
     BlockState blockState;
 
+    // set by prepareBlock
+    BakedModel currentModel;
+    ModelData currentModelData;
+    long currentSeed;
+    private int facesChecked;
+    private int facesVisible;
+
     public void setResources(BuilderResources resources) {
         this.resources = resources;
     }
@@ -63,50 +73,73 @@ public class BlockRenderer {
         BlockRenderer.blockColors = blockColors;
     }
 
-    public void renderBlock(BlockState blockState, BlockPos blockPos, Vector3f pos, TerrainBufferBuilder bufferBuilder) {
+    public ChunkRenderTypeSet prepareBlock(BlockState blockState, BlockPos blockPos, Vector3f pos) {
         this.pos = pos;
         this.blockPos = blockPos;
         this.blockState = blockState;
+        this.currentSeed = blockState.getSeed(blockPos);
+        this.facesChecked = 0;
+        this.facesVisible = 0;
 
-        long seed = blockState.getSeed(blockPos);
+        this.currentModel = Minecraft.getInstance().getBlockRenderer().getBlockModel(blockState);
 
-        BakedModel model = Minecraft.getInstance().getBlockRenderer().getBlockModel(blockState);
-        tessellateBlock(model, bufferBuilder, seed);
-    }
-
-    public void tessellateBlock(BakedModel bakedModel, TerrainBufferBuilder bufferBuilder, long seed) {
         Vec3 offset = blockState.getOffset(resources.region, blockPos);
-
         pos.add((float) offset.x, (float) offset.y, (float) offset.z);
-
-        boolean useAO = Minecraft.useAmbientOcclusion() && blockState.getLightEmission() == 0 && bakedModel.useAmbientOcclusion();
-        LightPipeline lightPipeline = useAO ? resources.smoothLightPipeline : resources.flatLightPipeline;
 
         // main thread snapshot
         ModelData modelData = resources.region.getModelData(blockPos);
         // connected textures need this
-        modelData = bakedModel.getModelData(resources.region, blockPos, blockState, modelData);
+        this.currentModelData = this.currentModel.getModelData(resources.region, blockPos, blockState, modelData);
+
+        randomSource.setSeed(currentSeed);
+        ChunkRenderTypeSet types = this.currentModel.getRenderTypes(blockState, randomSource, currentModelData);
+        // some models return none
+        if (types.isEmpty()) {
+            types = ChunkRenderTypeSet.of(ItemBlockRenderTypes.getChunkRenderType(blockState));
+        }
+        return types;
+    }
+
+    public void renderBlockPass(TerrainBufferBuilder bufferBuilder, RenderType renderType) {
+        BakedModel bakedModel = this.currentModel;
+        ModelData modelData = this.currentModelData;
+
+        LightPipeline lightPipeline = this.lightPipeline(bakedModel.useAmbientOcclusion());
 
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0; i < DIRECTIONS.length; ++i) {
             Direction direction = DIRECTIONS[i];
 
-            randomSource.setSeed(seed);
-            List<BakedQuad> quads = bakedModel.getQuads(blockState, direction, randomSource, modelData, null);
+            randomSource.setSeed(currentSeed);
+            List<BakedQuad> quads = bakedModel.getQuads(blockState, direction, randomSource, modelData, renderType);
 
-            if (!quads.isEmpty()) {
-                mutableBlockPos.setWithOffset(blockPos, direction);
-                if (shouldRenderFace(blockState, direction, mutableBlockPos)) {
-                    renderModelFace(bufferBuilder, quads, lightPipeline, direction);
-                }
-            }
+            if (!quads.isEmpty() && this.isFaceVisible(i, direction))
+                renderModelFace(bufferBuilder, quads, lightPipeline, direction);
         }
 
-        randomSource.setSeed(seed);
-        List<BakedQuad> quads = bakedModel.getQuads(blockState, null, randomSource, modelData, null);
+        randomSource.setSeed(currentSeed);
+        List<BakedQuad> quads = bakedModel.getQuads(blockState, null, randomSource, modelData, renderType);
         if (!quads.isEmpty()) {
             renderModelFace(bufferBuilder, quads, lightPipeline, null);
         }
+    }
+
+    // emissive blocks stay flat
+    private LightPipeline lightPipeline(boolean modelAO) {
+        boolean smooth = modelAO && Minecraft.useAmbientOcclusion() && blockState.getLightEmission() == 0;
+        return smooth ? resources.smoothLightPipeline : resources.flatLightPipeline;
+    }
+
+    // shared across render types
+    private boolean isFaceVisible(int index, Direction direction) {
+        int bit = 1 << index;
+        if ((this.facesChecked & bit) == 0) {
+            this.facesChecked |= bit;
+            mutableBlockPos.setWithOffset(blockPos, direction);
+            if (shouldRenderFace(blockState, direction, mutableBlockPos))
+                this.facesVisible |= bit;
+        }
+        return (this.facesVisible & bit) != 0;
     }
 
     private void renderModelFace(TerrainBufferBuilder bufferBuilder, List<BakedQuad> quads, LightPipeline lightPipeline, Direction cullFace) {
@@ -115,7 +148,8 @@ public class BlockRenderer {
         for (int i = 0; i < quads.size(); ++i) {
             BakedQuad bakedQuad = quads.get(i);
             QuadView quadView = (QuadView) bakedQuad;
-            lightPipeline.calculate(quadView, blockPos, quadLightData, cullFace, bakedQuad.getDirection(), bakedQuad.isShade());
+            LightPipeline quadLightPipeline = bakedQuad.hasAmbientOcclusion() ? lightPipeline : resources.flatLightPipeline;
+            quadLightPipeline.calculate(quadView, blockPos, quadLightData, cullFace, bakedQuad.getDirection(), bakedQuad.isShade());
             putQuadData(bufferBuilder, quadView, quadLightData);
         }
     }
