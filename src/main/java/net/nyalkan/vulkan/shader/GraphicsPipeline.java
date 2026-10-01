@@ -14,7 +14,10 @@ import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.ToLongFunction;
 
 import static org.lwjgl.system.MemoryStack.stackGet;
 import static org.lwjgl.system.MemoryStack.stackPush;
@@ -26,6 +29,8 @@ public class GraphicsPipeline extends Pipeline {
     private final VertexFormat vertexFormat;
     private final VertexFormat instanceFormat;
     private final VertexInputDescription vertexInputDescription;
+
+    private final Map<VertexFormat, AdaptedLayout> adaptedLayouts = new HashMap<>();
 
     private long vertShaderModule = 0;
     private long fragShaderModule = 0;
@@ -46,8 +51,7 @@ public class GraphicsPipeline extends Pipeline {
         createShaderModules(builder.vertShaderSPIRV, builder.fragShaderSPIRV);
 
         if (builder.renderPass != null)
-            graphicsPipelines.computeIfAbsent(PipelineState.DEFAULT,
-                    this::createGraphicsPipeline);
+            getHandle(PipelineState.DEFAULT);
 
         createDescriptorSets(Renderer.getFramesNum());
 
@@ -55,10 +59,34 @@ public class GraphicsPipeline extends Pipeline {
     }
 
     public long getHandle(PipelineState state) {
-        return graphicsPipelines.computeIfAbsent(state, this::createGraphicsPipeline);
+        ToLongFunction<PipelineState> create = s -> createGraphicsPipeline(s, vertexInputDescription);
+        return graphicsPipelines.computeIfAbsent(state, create);
     }
 
-    private long createGraphicsPipeline(PipelineState state) {
+    public long getHandle(PipelineState state, VertexFormat bufferFormat) {
+        if (bufferFormat == vertexFormat)
+            return getHandle(state);
+
+        AdaptedLayout layout = adaptedLayouts.computeIfAbsent(bufferFormat,
+                f -> new AdaptedLayout(VertexInputDescription.adapted(vertexFormat, f)));
+        ToLongFunction<PipelineState> create = s -> createGraphicsPipeline(s, layout.description);
+        return layout.pipelines.computeIfAbsent(state, create);
+    }
+
+    public boolean canReadFormat(VertexFormat bufferFormat) {
+        if (bufferFormat == vertexFormat)
+            return true;
+        if (instanceFormat != null)
+            return false;
+
+        for (VertexFormatElement element : vertexFormat.getElements()) {
+            if (!bufferFormat.contains(element))
+                return false;
+        }
+        return true;
+    }
+
+    private long createGraphicsPipeline(PipelineState state, VertexInputDescription vertexInputDescription) {
         try (MemoryStack stack = stackPush()) {
             ByteBuffer entryPoint = stack.UTF8("main");
 
@@ -77,6 +105,13 @@ public class GraphicsPipeline extends Pipeline {
             fragShaderStageInfo.stage(VK_SHADER_STAGE_FRAGMENT_BIT);
             fragShaderStageInfo.module(fragShaderModule);
             fragShaderStageInfo.pName(entryPoint);
+            if ((state.blendState_i & PipelineState.BlendState.OPAQUE_ALPHA_BIT) != 0) {
+                VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(1, stack);
+                entries.get(0).constantID(SPIRVUtils.OPAQUE_ALPHA_CONSTANT).offset(0).size(4);
+                fragShaderStageInfo.pSpecializationInfo(VkSpecializationInfo.calloc(stack)
+                        .pMapEntries(entries)
+                        .pData(stack.malloc(4).putInt(0, 1)));
+            }
 
             // ===> VERTEX STAGE <===
 
@@ -235,6 +270,12 @@ public class GraphicsPipeline extends Pipeline {
 
         vertexInputDescription.cleanUp();
 
+        adaptedLayouts.forEach((format, layout) -> {
+            layout.description.cleanUp();
+            layout.pipelines.forEach((state, pipeline) -> vkDestroyPipeline(DeviceManager.vkDevice, pipeline, null));
+        });
+        adaptedLayouts.clear();
+
         destroyDescriptorSets();
 
         graphicsPipelines.forEach((state, pipeline) -> {
@@ -282,9 +323,30 @@ public class GraphicsPipeline extends Pipeline {
             MemoryUtil.memFree(instanceAttrs);
         }
 
+        static VertexInputDescription adapted(VertexFormat shaderFormat, VertexFormat bufferFormat) {
+            VkVertexInputAttributeDescription.Buffer attributes = getAttributeDescriptions(shaderFormat, 0, 0);
+
+            List<VertexFormatElement> elements = shaderFormat.getElements();
+            for (int i = 0; i < elements.size(); ++i)
+                attributes.get(i).offset(bufferFormat.getOffset(elements.get(i)));
+
+            return new VertexInputDescription(attributes, getBindingDescription(bufferFormat, 0, VK_VERTEX_INPUT_RATE_VERTEX));
+        }
+
+        private VertexInputDescription(VkVertexInputAttributeDescription.Buffer attributeDescriptions, VkVertexInputBindingDescription.Buffer bindingDescriptions) {
+            this.attributeDescriptions = attributeDescriptions;
+            this.bindingDescriptions = bindingDescriptions;
+        }
+
         void cleanUp() {
             MemoryUtil.memFree(this.bindingDescriptions);
             MemoryUtil.memFree(this.attributeDescriptions);
+        }
+    }
+
+    private record AdaptedLayout(VertexInputDescription description, Object2LongMap<PipelineState> pipelines) {
+        AdaptedLayout(VertexInputDescription description) {
+            this(description, new Object2LongOpenHashMap<>());
         }
     }
 

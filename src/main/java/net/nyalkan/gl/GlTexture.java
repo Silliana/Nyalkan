@@ -184,6 +184,24 @@ public class GlTexture {
         //TODO
     }
 
+    public static int getTexParameter(int target, int pName) {
+        if (target != GL11.GL_TEXTURE_2D)
+            throw new UnsupportedOperationException("target != GL_TEXTURE_2D not supported");
+
+        if (boundTexture == null)
+            return 0;
+
+        return switch (pName) {
+            case GL11.GL_TEXTURE_WRAP_S, GL11.GL_TEXTURE_WRAP_T -> boundTexture.clamp ? GL30.GL_CLAMP_TO_EDGE : GL11.GL_REPEAT;
+
+            default -> 0;
+        };
+    }
+
+    public static int getBoundTextureId() {
+        return boundTextureId;
+    }
+
     public static int getTexLevelParameter(int target, int level, int pName) {
         if (target != GL11.GL_TEXTURE_2D)
             throw new UnsupportedOperationException("target != GL_TEXTURE_2D not supported");
@@ -301,8 +319,8 @@ public class GlTexture {
         samplerFlags |= magFilter == GL11.GL_LINEAR ? SamplerManager.LINEAR_FILTERING_BIT : 0;
 
         samplerFlags |= switch (minFilter) {
-            case GL11.GL_LINEAR_MIPMAP_LINEAR -> SamplerManager.USE_MIPMAPS_BIT | SamplerManager.MIPMAP_LINEAR_FILTERING_BIT;
-            case GL11.GL_NEAREST_MIPMAP_NEAREST -> SamplerManager.USE_MIPMAPS_BIT;
+            case GL11.GL_LINEAR_MIPMAP_LINEAR, GL11.GL_NEAREST_MIPMAP_LINEAR -> SamplerManager.USE_MIPMAPS_BIT | SamplerManager.MIPMAP_LINEAR_FILTERING_BIT;
+            case GL11.GL_NEAREST_MIPMAP_NEAREST, GL11.GL_LINEAR_MIPMAP_NEAREST -> SamplerManager.USE_MIPMAPS_BIT;
             default -> 0;
         };
 
