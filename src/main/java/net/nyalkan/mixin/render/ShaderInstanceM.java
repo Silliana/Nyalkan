@@ -16,6 +16,7 @@ import net.nyalkan.vulkan.shader.Pipeline;
 import net.nyalkan.vulkan.shader.descriptor.UBO;
 import net.nyalkan.vulkan.shader.layout.Uniform;
 import net.nyalkan.vulkan.shader.parser.GlslConverter;
+import net.nyalkan.vulkan.shader.parser.ResourceIncludes;
 import net.nyalkan.vulkan.util.MappedBuffer;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.Nullable;
@@ -226,6 +227,7 @@ public class ShaderInstanceM implements ShaderMixed {
             String fshSrc = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
 
             GlslConverter converter = new GlslConverter();
+            converter.setIncludeResolver(ResourceIncludes.resolver(resourceProvider));
             Pipeline.Builder builder = new Pipeline.Builder(format, this.name);
 
             converter.process(vshSrc, fshSrc);

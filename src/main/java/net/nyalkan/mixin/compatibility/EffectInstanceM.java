@@ -18,6 +18,7 @@ import net.nyalkan.vulkan.shader.Pipeline;
 import net.nyalkan.vulkan.shader.layout.Uniform;
 import net.nyalkan.vulkan.shader.descriptor.UBO;
 import net.nyalkan.vulkan.shader.parser.GlslConverter;
+import net.nyalkan.vulkan.shader.parser.ResourceIncludes;
 import net.nyalkan.vulkan.util.MappedBuffer;
 import org.apache.commons.io.IOUtils;
 import org.lwjgl.opengl.GL30;
@@ -108,6 +109,8 @@ public class EffectInstanceM {
 
             //TODO
             GlslConverter converter = new GlslConverter();
+            converter.setSamplerUnits(this.samplerNames);
+            converter.setIncludeResolver(ResourceIncludes.resolver(resourceManager));
 
             converter.process(vshSrc, fshSrc);
             UBO ubo = converter.getUBO();

@@ -38,7 +38,9 @@ public class UniformParser {
 
         }
         else if (this.name == null) {
-            token = removeSemicolon(token);
+            // comma separated declarations
+            boolean more = token.endsWith(",");
+            token = more ? token.substring(0, token.length() - 1) : removeSemicolon(token);
 
             this.name = token;
 
@@ -50,6 +52,11 @@ public class UniformParser {
             } else {
                 if (!this.globalUniforms.contains(uniform))
                     this.globalUniforms.add(uniform);
+            }
+
+            if (more) {
+                this.name = null;
+                return false;
             }
 
             this.resetSate();
@@ -115,7 +122,8 @@ public class UniformParser {
 
         for(StageUniforms stageUniforms : this.stageUniforms) {
             for(Uniform uniform : stageUniforms.samplers) {
-                int imageIdx = net.nyalkan.vulkan.texture.VTextureSelector.getTextureIdx(uniform.name);
+                // real texture unit
+                int imageIdx = this.converterInstance.getSamplerUnit(uniform.name);
                 imageDescriptors.add(new ImageDescriptor(currentLocation, uniform.type, uniform.name, imageIdx));
                 currentLocation++;
             }

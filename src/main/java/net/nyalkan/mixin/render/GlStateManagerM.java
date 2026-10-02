@@ -1,5 +1,10 @@
 package net.nyalkan.mixin.render;
 
+import java.util.WeakHashMap;
+import java.util.Map;
+import org.spongepowered.asm.mixin.Unique;
+import net.nyalkan.vulkan.RenderStateSnapshot;
+import net.neoforged.neoforge.client.GlStateBackup;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -8,10 +13,12 @@ import net.nyalkan.gl.GlFramebuffer;
 import net.nyalkan.gl.GlRenderbuffer;
 import net.nyalkan.gl.GlTexture;
 import net.nyalkan.vulkan.Renderer;
+import net.nyalkan.render.immediate.ImmediateBatcher;
 import net.nyalkan.vulkan.VRenderSystem;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -59,11 +66,16 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _disableScissorTest() {
+        ImmediateBatcher.INSTANCE.flushGui();
+        VRenderSystem.scissorTest = false;
         Renderer.resetScissor();
     }
 
     @Overwrite(remap = false)
-    public static void _enableScissorTest() {}
+    public static void _enableScissorTest() {
+        ImmediateBatcher.INSTANCE.flushGui();
+        VRenderSystem.scissorTest = true;
+    }
 
     @Overwrite(remap = false)
     public static void _enableCull() {
@@ -77,11 +89,18 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _viewport(int x, int y, int width, int height) {
+        ImmediateBatcher.INSTANCE.flushGui();
         Renderer.setViewport(x, y, width, height);
     }
 
     @Overwrite(remap = false)
     public static void _scissorBox(int x, int y, int width, int height) {
+        ImmediateBatcher.INSTANCE.flushGui();
+        int[] box = VRenderSystem.scissorBox;
+        box[0] = x;
+        box[1] = y;
+        box[2] = width;
+        box[3] = height;
         Renderer.setScissor(x, y, width, height);
     }
 
@@ -121,6 +140,8 @@ public class GlStateManagerM {
     public static int _getInteger(int i) {
         if (i == GL11.GL_MAX_TEXTURE_SIZE)
             return VRenderSystem.maxSupportedTextureSize();
+        if (i == GL30.GL_DRAW_FRAMEBUFFER_BINDING || i == GL30.GL_READ_FRAMEBUFFER_BINDING)
+            return GlFramebuffer.getBinding(i == GL30.GL_READ_FRAMEBUFFER_BINDING);
         return 0;
     }
 
@@ -179,6 +200,7 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _clear(int mask, boolean bl) {
+        ImmediateBatcher.INSTANCE.flushGui();
         RenderSystem.assertOnRenderThreadOrInit();
         VRenderSystem.clear(mask);
     }
@@ -219,6 +241,7 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _glBindFramebuffer(int i, int j) {
+        ImmediateBatcher.INSTANCE.flushGui();
         RenderSystem.assertOnRenderThreadOrInit();
         GlFramebuffer.bindFramebuffer(i, j);
     }
@@ -322,16 +345,19 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _stencilFunc(int func, int ref, int mask) {
+        ImmediateBatcher.INSTANCE.flushGui();
         VRenderSystem.stencilFunc(func, ref, mask);
     }
 
     @Overwrite(remap = false)
     public static void _stencilMask(int mask) {
+        ImmediateBatcher.INSTANCE.flushGui();
         VRenderSystem.stencilMask(mask);
     }
 
     @Overwrite(remap = false)
     public static void _stencilOp(int sfail, int dpfail, int dppass) {
+        ImmediateBatcher.INSTANCE.flushGui();
         VRenderSystem.stencilOp(sfail, dpfail, dppass);
     }
 
@@ -342,4 +368,20 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _logicOp(int logicOperation) {}
+
+    // vanilla cache is stale
+    @Unique
+    private static final Map<GlStateBackup, RenderStateSnapshot> nyalkan$backups = new WeakHashMap<>();
+
+    @Overwrite(remap = false)
+    public static void _backupGlState(GlStateBackup state) {
+        nyalkan$backups.computeIfAbsent(state, k -> new RenderStateSnapshot()).capture();
+    }
+
+    @Overwrite(remap = false)
+    public static void _restoreGlState(GlStateBackup state) {
+        RenderStateSnapshot snapshot = nyalkan$backups.get(state);
+        if (snapshot != null)
+            snapshot.restore();
+    }
 }

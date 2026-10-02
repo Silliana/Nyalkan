@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.nyalkan.interfaces.ShaderMixed;
+import net.nyalkan.render.immediate.ImmediateBatcher;
 import net.nyalkan.vulkan.Renderer;
 import net.nyalkan.vulkan.VRenderSystem;
 import net.nyalkan.vulkan.memory.AutoIndexBuffer;
@@ -107,6 +108,13 @@ public class VBO {
 
             RenderSystem.setShader(() -> shader);
 
+            // legacy uniforms like vanilla
+            shader.apply();
+            if (shader.MODEL_VIEW_MATRIX != null)
+                shader.MODEL_VIEW_MATRIX.set(MV);
+            if (shader.PROJECTION_MATRIX != null)
+                shader.PROJECTION_MATRIX.set(P);
+
             drawWithShader(MV, P, ((ShaderMixed) shader).getPipeline());
 
         }
@@ -115,6 +123,7 @@ public class VBO {
     public void drawWithShader(Matrix4f MV, Matrix4f P, GraphicsPipeline pipeline) {
         if (this.indexCount != 0) {
             RenderSystem.assertOnRenderThread();
+            ImmediateBatcher.INSTANCE.flushGui();
 
             VRenderSystem.applyMVP(MV, P);
 
@@ -138,6 +147,7 @@ public class VBO {
     public void draw() {
         if (this.indexCount != 0) {
             RenderSystem.assertOnRenderThread();
+            ImmediateBatcher.INSTANCE.flushGui();
 
             Renderer renderer = Renderer.getInstance();
             Pipeline pipeline = renderer.getBoundPipeline();

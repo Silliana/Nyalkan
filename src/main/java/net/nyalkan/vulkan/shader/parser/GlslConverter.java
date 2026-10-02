@@ -1,5 +1,6 @@
 package net.nyalkan.vulkan.shader.parser;
 
+import net.nyalkan.vulkan.shader.SPIRVUtils;
 import net.nyalkan.vulkan.shader.descriptor.ImageDescriptor;
 import net.nyalkan.vulkan.shader.descriptor.UBO;
 
@@ -15,6 +16,26 @@ public class GlslConverter {
 
     private String vshConverted;
     private String fshConverted;
+
+    // sampler unit order
+    private List<String> samplerUnits = List.of();
+
+    public void setSamplerUnits(List<String> samplerUnits) {
+        this.samplerUnits = samplerUnits;
+    }
+
+    // namespaced moj_import sources
+    private java.util.function.Function<String, String> includeResolver;
+    private final Set<String> included = new HashSet<>();
+
+    public void setIncludeResolver(java.util.function.Function<String, String> includeResolver) {
+        this.includeResolver = includeResolver;
+    }
+
+    int getSamplerUnit(String name) {
+        int unit = this.samplerUnits.indexOf(name);
+        return unit >= 0 ? unit : net.nyalkan.vulkan.texture.VTextureSelector.getTextureIdx(name);
+    }
 
     public void process(String vertShader, String fragShader) {
         this.uniformParser = new UniformParser(this);
@@ -80,7 +101,9 @@ public class GlslConverter {
 
     private String parseLine(String line) {
 
-        StringTokenizer tokenizer = new StringTokenizer(line);
+        // strip trailing comment
+        int commentStart = line.indexOf("//");
+        StringTokenizer tokenizer = new StringTokenizer(commentStart >= 0 ? line.substring(0, commentStart) : line);
 
         // empty line
         if (!tokenizer.hasMoreTokens())
@@ -90,7 +113,7 @@ public class GlslConverter {
 
         switch (token) {
             case "uniform" -> this.state = State.MATCHING_UNIFORM;
-            case "in", "out" -> this.state = State.MATCHING_IN_OUT;
+            case "in", "out", "flat", "smooth", "noperspective", "centroid" -> this.state = State.MATCHING_IN_OUT;
             case "#version" -> {
                 return null;
             }
@@ -99,7 +122,12 @@ public class GlslConverter {
                     throw new IllegalArgumentException("Token count != 1");
                 }
 
-                return String.format("#include %s", tokenizer.nextToken());
+                String include = tokenizer.nextToken();
+                String source = this.resolveInclude(include);
+                if (source != null)
+                    return this.parseIncluded(include, source);
+
+                return String.format("#include %s", include);
             }
 
             default -> {
@@ -122,6 +150,31 @@ public class GlslConverter {
         return null;
     }
 
+    private String resolveInclude(String include) {
+        String name = include.substring(1, include.length() - 1);
+        if (this.includeResolver == null)
+            return null;
+
+        boolean vanilla = !name.contains(":") || name.startsWith("minecraft:");
+        if (vanilla && SPIRVUtils.hasInclude(name))
+            return null;
+
+        return this.includeResolver.apply(name);
+    }
+
+    private String parseIncluded(String include, String source) {
+        if (!this.included.add(include))
+            return "";
+
+        StringBuilder out = new StringBuilder();
+        for (String line : source.split("\n")) {
+            String parsedLine = this.parseLine(line);
+            if (parsedLine != null)
+                out.append(parsedLine).append("\n");
+        }
+        return out.toString();
+    }
+
     private void feedToken(String token) {
         switch (this.state) {
             case MATCHING_UNIFORM -> this.uniformParser.parseToken(token);
@@ -131,6 +184,7 @@ public class GlslConverter {
 
     private void setShaderStage(ShaderStage shaderStage) {
         this.shaderStage = shaderStage;
+        this.included.clear();
         this.uniformParser.setCurrentUniforms(this.shaderStage);
         this.inOutParser.setShaderStage(this.shaderStage);
     }

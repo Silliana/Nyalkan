@@ -1,6 +1,7 @@
 package net.nyalkan.vulkan.texture;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import net.nyalkan.Initializer;
 import net.nyalkan.vulkan.Synchronization;
 import net.nyalkan.vulkan.Vulkan;
 import net.nyalkan.vulkan.device.DeviceManager;
@@ -9,6 +10,7 @@ import net.nyalkan.vulkan.memory.StagingBuffer;
 import net.nyalkan.vulkan.queue.CommandPool;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkDevice;
 import org.lwjgl.vulkan.VkImageMemoryBarrier;
@@ -45,6 +47,8 @@ public class VulkanImage {
     private final int usage;
 
     private int currentLayout;
+
+    private static int outOfBoundsUploads;
 
     //Used for swap chain images
     public VulkanImage(long id, int format, int mipLevels, int width, int height, int formatSize, int usage, long imageView) {
@@ -193,20 +197,48 @@ public class VulkanImage {
     }
 
     public void uploadSubTextureAsync(int mipLevel, int width, int height, int xOffset, int yOffset, int unpackSkipRows, int unpackSkipPixels, int unpackRowLength, ByteBuffer buffer) {
-        long imageSize = buffer.limit();
+        // gl skips outside uploads
+        int levelWidth = Math.max(1, this.width >> mipLevel);
+        int levelHeight = Math.max(1, this.height >> mipLevel);
+        if (mipLevel < 0 || mipLevel >= this.mipLevels || xOffset < 0 || yOffset < 0
+                || xOffset + width > levelWidth || yOffset + height > levelHeight) {
+            if (outOfBoundsUploads++ < 5)
+                Initializer.LOGGER.warn("Skipping out-of-bounds texture upload: {}x{} at ({}, {}) mip {} into {}x{} image with {} mips",
+                        width, height, xOffset, yOffset, mipLevel, this.width, this.height, this.mipLevels, new Throwable("upload caller"));
+            return;
+        }
+
+        StagingBuffer stagingBuffer = Vulkan.getStagingBuffer();
+        stagingBuffer.align(this.formatSize);
+
+        // only the uploaded rows
+        int rowLength = unpackRowLength != 0 ? unpackRowLength : width;
+        long regionStart = ((long) unpackSkipRows * rowLength + unpackSkipPixels) * this.formatSize;
+        long regionEnd = ((long) (unpackSkipRows + height - 1) * rowLength + unpackSkipPixels + width) * this.formatSize;
+
+        int bufferOffset;
+        if (regionEnd <= buffer.remaining()) {
+            stagingBuffer.copyBuffer((int) (regionEnd - regionStart), MemoryUtil.memByteBuffer(MemoryUtil.memAddress(buffer) + regionStart, (int) (regionEnd - regionStart)));
+            bufferOffset = (int) stagingBuffer.getOffset();
+        }
+        else {
+            stagingBuffer.copyBuffer(buffer.limit(), buffer);
+            bufferOffset = (int) (stagingBuffer.getOffset() + (unpackRowLength * unpackSkipRows + unpackSkipPixels) * this.formatSize);
+        }
+
+        if (SpriteUploadBatch.isActive()) {
+            SpriteUploadBatch.add(this, stagingBuffer.getId(), bufferOffset, unpackRowLength, mipLevel, xOffset, yOffset, width, height);
+            return;
+        }
+        SpriteUploadBatch.flush(this);
 
         CommandPool.CommandBuffer commandBuffer = DeviceManager.getGraphicsQueue().getCommandBuffer();
         try (MemoryStack stack = stackPush()) {
             transferDstLayout(stack, commandBuffer.getHandle());
         }
 
-        StagingBuffer stagingBuffer = Vulkan.getStagingBuffer();
-        stagingBuffer.align(this.formatSize);
-
-        stagingBuffer.copyBuffer((int) imageSize, buffer);
-
         ImageUtil.copyBufferToImageCmd(commandBuffer.getHandle(), stagingBuffer.getId(), id, mipLevel, width, height, xOffset, yOffset,
-                (int) (stagingBuffer.getOffset() + (unpackRowLength * unpackSkipRows + unpackSkipPixels) * this.formatSize), unpackRowLength, height);
+                bufferOffset, unpackRowLength, height);
 
         long fence = DeviceManager.getGraphicsQueue().endIfNeeded(commandBuffer);
         if (fence != VK_NULL_HANDLE)
@@ -375,7 +407,7 @@ public class VulkanImage {
 
         if (this.levelImageViews != null)
             Arrays.stream(this.levelImageViews).forEach(
-                    imageView -> vkDestroyImageView(Vulkan.getVkDevice(), this.mainImageView, null));
+                    imageView -> vkDestroyImageView(Vulkan.getVkDevice(), imageView, null));
 
         this.id = 0L;
     }

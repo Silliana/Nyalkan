@@ -51,10 +51,10 @@ public class Uniform {
 
     public static Uniform createField(Info info) {
         return switch (info.type) {
-            case "mat4", "vec3", "vec4", "vec2" -> new Uniform(info);
+            case "mat4", "vec3", "vec4", "vec2", "ivec4", "ivec3", "ivec2" -> new Uniform(info);
             case "mat3" -> new Mat3(info);
             case "float" -> new Vec1f(info);
-            case "int" -> new Vec1i(info);
+            case "int", "bool" -> new Vec1i(info);
             default -> throw new RuntimeException("not admitted type: " + info.type);
         };
     }
@@ -89,13 +89,18 @@ public class Uniform {
     public static Info createUniformInfo(String type, String name) {
         return switch (type) {
             case "mat4" -> new Info(type, name, 4, 16);
-            case "mat3" -> new Info(type, name, 4, 9);
+            // std140 padded columns
+            case "mat3" -> new Info(type, name, 4, 12);
 
             case "vec4" -> new Info(type, name, 4, 4);
             case "vec3" -> new Info(type, name, 4, 3);
             case "vec2" -> new Info(type, name, 2, 2);
 
-            case "float", "int" -> new Info(type, name, 1, 1);
+            case "ivec4" -> new Info(type, name, 4, 4);
+            case "ivec3" -> new Info(type, name, 4, 3);
+            case "ivec2" -> new Info(type, name, 2, 2);
+
+            case "float", "int", "bool" -> new Info(type, name, 1, 1);
 
             default -> throw new RuntimeException("not admitted type: " + type);
         };
