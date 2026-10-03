@@ -1,5 +1,8 @@
 package net.nyalkan.render.chunk.build.thread;
 
+import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.nyalkan.render.texture.SpriteUtil;
 import net.nyalkan.Initializer;
 import net.nyalkan.render.chunk.RenderSection;
 import net.nyalkan.render.chunk.build.BlockRenderer;
@@ -15,6 +18,7 @@ import net.nyalkan.render.chunk.build.light.smooth.NewSmoothLightPipeline;
 import net.nyalkan.render.chunk.build.light.smooth.SmoothLightPipeline;
 
 public class BuilderResources {
+    public final ReferenceOpenHashSet<TextureAtlasSprite> animatedSprites = new ReferenceOpenHashSet<>();
     public final ThreadBuilderPack builderPack = new ThreadBuilderPack();
     public final BlockRenderer blockRenderer = new BlockRenderer();
     public final LiquidRenderer liquidRenderer = new LiquidRenderer();
@@ -47,6 +51,11 @@ public class BuilderResources {
 
         blockRenderer.setResources(this);
         liquidRenderer.setResources(this);
+    }
+
+    public void trackSprite(TextureAtlasSprite sprite) {
+        if (SpriteUtil.isAnimated(sprite))
+            this.animatedSprites.add(sprite);
     }
 
     public void clear() {

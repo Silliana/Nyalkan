@@ -1,5 +1,7 @@
 package net.nyalkan.render.texture;
 
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.nyalkan.interfaces.ExtendedSpriteContents;
 import net.nyalkan.vulkan.texture.VulkanImage;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
@@ -19,6 +21,20 @@ public abstract class SpriteUtil {
 
     public static boolean shouldUpload() {
         return doUpload;
+    }
+
+    public static boolean isAnimated(TextureAtlasSprite sprite) {
+        return sprite != null && ((ExtendedSpriteContents) sprite.contents()).nyalkan$isAnimated();
+    }
+
+    public static void markActive(TextureAtlasSprite sprite) {
+        if (isAnimated(sprite))
+            ((ExtendedSpriteContents) sprite.contents()).nyalkan$setActive(true);
+    }
+
+    public static void markActive(TextureAtlasSprite[] sprites) {
+        for (TextureAtlasSprite sprite : sprites)
+            ((ExtendedSpriteContents) sprite.contents()).nyalkan$setActive(true);
     }
 
     public static void addTransitionedLayout(VulkanImage image) {

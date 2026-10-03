@@ -5,6 +5,7 @@ import net.minecraft.client.renderer.texture.Tickable;
 import net.nyalkan.render.texture.SpriteUtil;
 import net.nyalkan.vulkan.Renderer;
 import net.nyalkan.vulkan.device.DeviceManager;
+import net.nyalkan.vulkan.texture.SpriteUploadBatch;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -23,12 +24,15 @@ public abstract class MTextureManager {
             return;
 
         //Debug D
-        if (SpriteUtil.shouldUpload())
+        if (SpriteUtil.shouldUpload()) {
             DeviceManager.getGraphicsQueue().startRecording();
+            SpriteUploadBatch.beginTick();
+        }
         for (Tickable tickable : this.tickableTextures) {
             tickable.tick();
         }
         if (SpriteUtil.shouldUpload()) {
+            SpriteUploadBatch.endTick();
             SpriteUtil.transitionLayouts(DeviceManager.getGraphicsQueue().getCommandBuffer().getHandle());
             DeviceManager.getGraphicsQueue().endRecordingAndSubmit();
         }

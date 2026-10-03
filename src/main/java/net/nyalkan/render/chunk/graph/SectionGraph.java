@@ -1,5 +1,7 @@
 package net.nyalkan.render.chunk.graph;
 
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.nyalkan.render.texture.SpriteUtil;
 import com.google.common.collect.Lists;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -304,6 +306,11 @@ public class SectionGraph {
 
             this.chunkAreaQueue.add(renderSection.getChunkArea());
 
+            if (renderSection.containsBlockEntities()) {
+                this.blockEntitiesSections.ensureCapacity(1);
+                this.blockEntitiesSections.add(renderSection);
+            }
+
             if (renderSection.isDirty()) {
                 this.rebuildQueue.ensureCapacity(1);
                 this.rebuildQueue.add(renderSection);
@@ -338,12 +345,26 @@ public class SectionGraph {
         relativeSection.directionChanges = dc < relativeSection.directionChanges ? dc : relativeSection.directionChanges;
     }
 
+    public void markAnimatedSprites() {
+        this.chunkAreaQueue.queue().forEach(area -> area.sectionQueue.forEach(SectionGraph::markAnimatedSprites));
+    }
+
+    private static void markAnimatedSprites(RenderSection section) {
+        TextureAtlasSprite[] sprites = section.getCompiledSection().getAnimatedSprites();
+        if (sprites != null)
+            SpriteUtil.markActive(sprites);
+    }
+
     public AreaSetQueue getChunkAreaQueue() {
         return this.chunkAreaQueue;
     }
 
     public ResettableQueue<RenderSection> getSectionQueue() {
         return this.sectionQueue;
+    }
+
+    public VFrustum getFrustum() {
+        return this.frustum;
     }
 
     public ResettableQueue<RenderSection> getBlockEntitiesSections() {
