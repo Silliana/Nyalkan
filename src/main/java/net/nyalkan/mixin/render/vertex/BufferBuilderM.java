@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(BufferBuilder.class)
 public abstract class BufferBuilderM
@@ -24,7 +25,19 @@ public abstract class BufferBuilderM
 
     @Shadow protected abstract long beginElement(VertexFormatElement vertexFormatElement);
 
+    @Shadow @Final private ByteBufferBuilder buffer;
+    @Shadow private long vertexPointer;
+    @Shadow private int vertices;
+    @Shadow @Final private VertexFormat.Mode mode;
+    @Shadow @Final private int vertexSize;
+
+    @Shadow protected abstract void ensureBuilding();
+    @Shadow protected abstract void endLastVertex();
+
     private long ptr;
+
+    @Unique
+    private static final boolean LITTLE_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.LITTLE_ENDIAN;
 
     public void vertex(float x, float y, float z, int packedColor, float u, float v, int overlay, int light, int packedNormal) {
         this.ptr = this.beginVertex();
@@ -58,6 +71,55 @@ public abstract class BufferBuilderM
 //            throw new RuntimeException("unaccepted format: " + this.format);
         }
 
+    }
+
+    @Override
+    public boolean canFastParticle() {
+        return this.format == DefaultVertexFormat.PARTICLE;
+    }
+
+    @Unique private boolean nyalkan$cullsBackFaces;
+
+    @Override
+    public boolean cullsBackFaces() {
+        return this.nyalkan$cullsBackFaces;
+    }
+
+    @Override
+    public void setCullsBackFaces(boolean culls) {
+        this.nyalkan$cullsBackFaces = culls;
+    }
+
+    @Override
+    public boolean canBulkWriteEntity() {
+        return LITTLE_ENDIAN && this.format == DefaultVertexFormat.NEW_ENTITY && this.mode == VertexFormat.Mode.QUADS;
+    }
+
+    @Override
+    public VertexFormat vertexFormat() {
+        return this.format;
+    }
+
+    @Override
+    public int bulkVertexCount() {
+        return this.vertices;
+    }
+
+    @Override
+    public long bulkWriteEnd() {
+        ByteBufferBuilderAccessor accessor = (ByteBufferBuilderAccessor) this.buffer;
+        return accessor.nyalkan$pointer() + accessor.nyalkan$writeOffset();
+    }
+
+    @Override
+    public long reserveEntityVertices(int count) {
+        this.ensureBuilding();
+        this.endLastVertex();
+
+        long ptr = this.buffer.reserve(count * this.vertexSize);
+        this.vertices += count;
+        this.vertexPointer = ptr + (long) (count - 1) * this.vertexSize;
+        return ptr;
     }
 
     public void vertex(float x, float y, float z, float u, float v, int packedColor, int light) {

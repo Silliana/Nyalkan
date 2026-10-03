@@ -36,6 +36,21 @@ public class SpriteCoordinateExpanderM implements ExtendedVertexBuilder {
     }
 
     @Override
+    public boolean canBulkWriteEntity() {
+        return this.canUseFastVertex && this.extDelegate.canBulkWriteEntity() && this.extDelegate.bulkSprite() == null;
+    }
+
+    @Override
+    public long reserveEntityVertices(int count) {
+        return this.extDelegate.reserveEntityVertices(count);
+    }
+
+    @Override
+    public TextureAtlasSprite bulkSprite() {
+        return this.sprite;
+    }
+
+    @Override
     public void vertex(float x, float y, float z, int packedColor, float u, float v, int overlay, int light, int packedNormal) {
         this.extDelegate.vertex(x, y, z, packedColor, this.sprite.getU(u), this.sprite.getV(v), overlay, light, packedNormal);
     }

@@ -17,6 +17,14 @@ public class CubeModel {
     public float maxY;
     public float maxZ;
 
+    private int[] normalAxis;
+
+    public float originX, originY, originZ;
+    public float sizeX, sizeY, sizeZ;
+    private int[] faceCorners;
+    private int[] faceWinding;
+    private long[] faceUvs;
+
     Vector3f[] vertices;
     Vector3f[] transformed = new Vector3f[8];
 
@@ -102,7 +110,81 @@ public class CubeModel {
         if (set.contains(Direction.SOUTH)) {
             this.polygons[idx] = new ModelPart.Polygon(new ModelPart.Vertex[]{vertex5, vertex6, vertex7, vertex8}, aa, ad, ab, ae, q, r, bl, Direction.SOUTH);
         }
+
+        this.normalAxis = new int[this.polygons.length];
+        for (int face = 0; face < this.polygons.length; face++)
+            this.normalAxis[face] = axisIndex(this.polygons[face].normal);
+
+        Vector3f min = this.vertices[0];
+        Vector3f max = this.vertices[6];
+        this.originX = min.x;
+        this.originY = min.y;
+        this.originZ = min.z;
+        this.sizeX = max.x - min.x;
+        this.sizeY = max.y - min.y;
+        this.sizeZ = max.z - min.z;
+
+        this.faceCorners = new int[this.polygons.length * 4];
+        this.faceUvs = new long[this.polygons.length * 4];
+        for (int face = 0; face < this.polygons.length; face++) {
+            ModelPart.Vertex[] faceVertices = this.polygons[face].vertices;
+            for (int corner = 0; corner < 4; corner++) {
+                ModelPart.Vertex vertex = faceVertices[corner];
+                this.faceCorners[face * 4 + corner] = cornerIndex(vertex.pos);
+                this.faceUvs[face * 4 + corner] = pack(Float.floatToRawIntBits(vertex.u), Float.floatToRawIntBits(vertex.v));
+            }
+        }
+
+        this.faceWinding = new int[this.polygons.length];
+        for (int face = 0; face < this.polygons.length; face++)
+            this.faceWinding[face] = winding(this.faceCorners[face * 4], this.faceCorners[face * 4 + 1], this.faceCorners[face * 4 + 2]);
     }
+
+    private static final int[][] UNIT_CORNERS = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}, {0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}};
+
+    // axis plus sign bit
+    private static int winding(int a, int b, int c) {
+        int[] pa = UNIT_CORNERS[a], pb = UNIT_CORNERS[b], pc = UNIT_CORNERS[c];
+        int ux = pb[0] - pa[0], uy = pb[1] - pa[1], uz = pb[2] - pa[2];
+        int vx = pc[0] - pa[0], vy = pc[1] - pa[1], vz = pc[2] - pa[2];
+        int[] n = {uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx};
+        for (int axis = 0; axis < 3; axis++) {
+            if (Math.abs(n[axis]) == 1 && n[(axis + 1) % 3] == 0 && n[(axis + 2) % 3] == 0)
+                return axis << 1 | (n[axis] < 0 ? 1 : 0);
+        }
+        return -1;
+    }
+
+    private int cornerIndex(Vector3f pos) {
+        for (int i = 0; i < 8; i++) {
+            if (this.transformed[i] == pos)
+                return i;
+        }
+        throw new IllegalStateException("Polygon vertex is not a cube corner");
+    }
+
+    public static long pack(int low, int high) {
+        return ((long) high << 32) | (low & 0xFFFFFFFFL);
+    }
+
+    public int[] getFaceCorners() { return this.faceCorners; }
+
+    public long[] getFaceUvs() { return this.faceUvs; }
+
+    public int[] getFaceWinding() { return this.faceWinding; }
+
+    // +X -X +Y -Y +Z -Z
+    private static int axisIndex(Vector3f normal) {
+        if (normal.x != 0.0f)
+            return normal.x > 0.0f ? 0 : 1;
+        if (normal.y != 0.0f)
+            return normal.y > 0.0f ? 2 : 3;
+        return normal.z > 0.0f ? 4 : 5;
+    }
+
+    public int[] getNormalAxis() { return this.normalAxis; }
+
+    public int getVertexCount() { return this.polygons.length * 4; }
 
     public void transformVertices(Matrix4f matrix) {
         //Transform original vertices and store them
