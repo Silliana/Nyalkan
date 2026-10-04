@@ -30,6 +30,10 @@ public class VertexBuffer extends Buffer {
 
     }
 
+    public void alignTo(int stride) {
+        this.usedBytes = (this.usedBytes + stride - 1) / stride * stride;
+    }
+
     private void resizeBuffer(int newSize) {
         MemoryManager.getInstance().addToFreeable(this);
         this.createBuffer(newSize);

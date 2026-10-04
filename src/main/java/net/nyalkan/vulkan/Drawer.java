@@ -33,6 +33,11 @@ public class Drawer {
 
     private int currentFrame;
 
+    private VkCommandBuffer boundCommandBuffer;
+    private long boundVertexBuffer, boundVertexOffset;
+    private long boundIndexBuffer, boundIndexOffset;
+    private int boundIndexType;
+
     public Drawer() {
         // Index buffers
         this.quadsIndexBuffer = new AutoIndexBuffer(AutoIndexBuffer.QUAD_U16_MAX_VERTEX_COUNT, AutoIndexBuffer.DrawType.QUADS);
@@ -67,6 +72,10 @@ public class Drawer {
         Arrays.setAll(this.uniformBuffers, i -> new UniformBuffer(INITIAL_UB_SIZE, MemoryTypes.HOST_MEM));
     }
 
+    public VertexBuffer getVertexBuffer() {
+        return this.vertexBuffers[this.currentFrame];
+    }
+
     public void resetBuffers(int currentFrame) {
         this.vertexBuffers[currentFrame].reset();
         this.uniformBuffers[currentFrame].reset();
@@ -77,7 +86,10 @@ public class Drawer {
         int indexCount;
 
         VertexBuffer vertexBuffer = this.vertexBuffers[this.currentFrame];
-        vertexBuffer.copyToVertexBuffer(vertexFormat.getVertexSize(), vertexCount, buffer);
+        int vertexSize = vertexFormat.getVertexSize();
+        vertexBuffer.alignTo(vertexSize);
+        vertexBuffer.copyToVertexBuffer(vertexSize, vertexCount, buffer);
+        int firstVertex = (int) (vertexBuffer.getOffset() / vertexSize);
 
         switch (mode) {
             case QUADS -> {
@@ -109,12 +121,16 @@ public class Drawer {
             default -> throw new RuntimeException(String.format("unknown drawMode: %s", mode));
         }
 
+        VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
+        bindVertexBuffer(commandBuffer, vertexBuffer.getId(), 0);
+
         if (indexCount > 0) {
             autoIndexBuffer.checkCapacity(vertexCount);
 
-            drawIndexed(vertexBuffer, autoIndexBuffer.getIndexBuffer(), indexCount);
+            bindIndexBuffer(commandBuffer, autoIndexBuffer.getIndexBuffer());
+            vkCmdDrawIndexed(commandBuffer, indexCount, 1, 0, firstVertex, 0);
         } else {
-            draw(vertexBuffer, vertexCount);
+            vkCmdDraw(commandBuffer, vertexCount, 1, firstVertex, 0);
         }
 
     }
@@ -122,10 +138,7 @@ public class Drawer {
     public void drawIndexed(VertexBuffer vertexBuffer, IndexBuffer indexBuffer, int indexCount) {
         VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
 
-        VUtil.UNSAFE.putLong(pBuffers, vertexBuffer.getId());
-        VUtil.UNSAFE.putLong(pOffsets, vertexBuffer.getOffset());
-        nvkCmdBindVertexBuffers(commandBuffer, 0, 1, pBuffers, pOffsets);
-
+        bindVertexBuffer(commandBuffer, vertexBuffer.getId(), vertexBuffer.getOffset());
         bindIndexBuffer(commandBuffer, indexBuffer);
         vkCmdDrawIndexed(commandBuffer, indexCount, 1, 0, 0, 0);
     }
@@ -133,15 +146,46 @@ public class Drawer {
     public void draw(VertexBuffer vertexBuffer, int vertexCount) {
         VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
 
-        VUtil.UNSAFE.putLong(pBuffers, vertexBuffer.getId());
-        VUtil.UNSAFE.putLong(pOffsets, vertexBuffer.getOffset());
-        nvkCmdBindVertexBuffers(commandBuffer, 0, 1, pBuffers, pOffsets);
-
+        bindVertexBuffer(commandBuffer, vertexBuffer.getId(), vertexBuffer.getOffset());
         vkCmdDraw(commandBuffer, vertexCount, 1, 0, 0);
     }
 
+    public void invalidateBindings() {
+        this.boundCommandBuffer = null;
+    }
+
+    private void bindVertexBuffer(VkCommandBuffer commandBuffer, long buffer, long offset) {
+        if (commandBuffer == this.boundCommandBuffer && buffer == this.boundVertexBuffer && offset == this.boundVertexOffset)
+            return;
+
+        if (commandBuffer != this.boundCommandBuffer) {
+            this.boundCommandBuffer = commandBuffer;
+            this.boundIndexBuffer = 0;
+        }
+        this.boundVertexBuffer = buffer;
+        this.boundVertexOffset = offset;
+
+        VUtil.UNSAFE.putLong(pBuffers, buffer);
+        VUtil.UNSAFE.putLong(pOffsets, offset);
+        nvkCmdBindVertexBuffers(commandBuffer, 0, 1, pBuffers, pOffsets);
+    }
+
     public void bindIndexBuffer(VkCommandBuffer commandBuffer, IndexBuffer indexBuffer) {
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer.getId(), indexBuffer.getOffset(), indexBuffer.indexType.type);
+        long id = indexBuffer.getId();
+        long offset = indexBuffer.getOffset();
+        int type = indexBuffer.indexType.type;
+        if (commandBuffer == this.boundCommandBuffer && id == this.boundIndexBuffer && offset == this.boundIndexOffset && type == this.boundIndexType)
+            return;
+
+        if (commandBuffer != this.boundCommandBuffer) {
+            this.boundCommandBuffer = commandBuffer;
+            this.boundVertexBuffer = 0;
+        }
+        this.boundIndexBuffer = id;
+        this.boundIndexOffset = offset;
+        this.boundIndexType = type;
+
+        vkCmdBindIndexBuffer(commandBuffer, id, offset, type);
     }
 
     public void cleanUpResources() {

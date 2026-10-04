@@ -6,6 +6,7 @@ import static net.nyalkan.vulkan.util.VUtil.align;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
 public class UniformBuffer extends Buffer {
+    private int epoch;
 
     private final static int minOffset = (int) DeviceManager.deviceProperties.limits().minUniformBufferOffsetAlignment();
 
@@ -35,5 +36,19 @@ public class UniformBuffer extends Buffer {
 
     public long getPointer() {
         return this.data.get(0) + usedBytes;
+    }
+
+    public long getBasePointer() {
+        return this.data.get(0);
+    }
+
+    public int getEpoch() {
+        return this.epoch;
+    }
+
+    @Override
+    public void reset() {
+        super.reset();
+        this.epoch++;
     }
 }
