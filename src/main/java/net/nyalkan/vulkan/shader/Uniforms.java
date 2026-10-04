@@ -3,6 +3,7 @@ package net.nyalkan.vulkan.shader;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
 import net.nyalkan.vulkan.VRenderSystem;
+import net.nyalkan.render.particle.GpuParticles;
 import net.nyalkan.vulkan.util.MappedBuffer;
 
 import java.util.function.Supplier;
@@ -49,6 +50,9 @@ public class Uniforms {
         //Vec4
         vec4f_uniformMap.put("ColorModulator", VRenderSystem::getShaderColor);
         vec4f_uniformMap.put("FogColor", VRenderSystem::getShaderFogColor);
+        vec4f_uniformMap.put("ParticleRight", () -> GpuParticles.RIGHT);
+        vec4f_uniformMap.put("ParticleUp", () -> GpuParticles.UP);
+        vec4f_uniformMap.put("ParticleOffset", () -> GpuParticles.OFFSET);
 
     }
 }
