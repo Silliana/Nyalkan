@@ -19,6 +19,8 @@ public class CompileResult {
 
     final List<BlockEntity> globalBlockEntities = new ArrayList<>();
     final List<BlockEntity> blockEntities = new ArrayList<>();
+    final List<BlockEntity> bakedBlockEntities = new ArrayList<>();
+    final List<BlockEntity> partialBlockEntities = new ArrayList<>();
     public final EnumMap<TerrainRenderType, UploadBuffer> renderedLayers = new EnumMap<>(TerrainRenderType.class);
 
     VisibilitySet visibilitySet;

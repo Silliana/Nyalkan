@@ -14,6 +14,8 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.core.BlockPos;
@@ -22,16 +24,22 @@ import net.minecraft.server.level.BlockDestructionProgress;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.AABB;
+import org.joml.FrustumIntersection;
 import net.minecraft.world.phys.Vec3;
 import net.nyalkan.Initializer;
 import net.nyalkan.interfaces.ExtendedRenderType;
 import net.nyalkan.render.CustomTerrainShaders;
 import net.nyalkan.render.PipelineManager;
 import net.nyalkan.render.chunk.buffer.DrawBuffers;
+import net.nyalkan.render.bake.BlockEntityBakery;
+import net.nyalkan.render.model.BlockEntityReplay;
+import net.nyalkan.render.occlusion.HiZ;
 import net.nyalkan.render.chunk.build.BlockRenderer;
 import net.nyalkan.render.chunk.build.RenderRegionBuilder;
 import net.nyalkan.render.chunk.build.TaskDispatcher;
 import net.nyalkan.render.chunk.build.task.ChunkTask;
+import net.nyalkan.render.chunk.frustum.VFrustum;
 import net.nyalkan.render.chunk.graph.SectionGraph;
 import net.nyalkan.render.profiling.BuildTimeProfiler;
 import net.nyalkan.render.profiling.Profiler;
@@ -200,6 +208,12 @@ public class WorldRenderer {
             }
         }
 
+        if (Initializer.CONFIG.animateOnlyVisible)
+            this.sectionGraph.markAnimatedSprites();
+
+        if (SectionDiagnostics.ENABLED)
+            SectionDiagnostics.dump(this, camera);
+
         this.indirectBuffers[Renderer.getCurrentFrame()].reset();
 //        this.uniformBuffers.reset();
 
@@ -235,6 +249,7 @@ public class WorldRenderer {
         if (this.level != null) {
 //            this.graphicsChanged();
             this.level.clearTintCaches();
+            BlockEntityBakery.clear();
 
             this.renderRegionCache.clear();
             this.taskDispatcher.createThreads();
@@ -409,18 +424,32 @@ public class WorldRenderer {
         profiler.push("Block-entities");
 
         MultiBufferSource bufferSource = this.renderBuffers.bufferSource();
+        VFrustum frustum = this.sectionGraph.getFrustum();
+        BlockEntityRenderDispatcher dispatcher = this.minecraft.getBlockEntityRenderDispatcher();
+        boolean breaking = !destructionProgress.isEmpty();
 
         for (RenderSection renderSection : this.sectionGraph.getBlockEntitiesSections()) {
             List<BlockEntity> list = renderSection.getCompiledSection().getBlockEntities();
+            Set<BlockEntity> partial = renderSection.getCompiledSection().getPartialBlockEntities();
             if (!list.isEmpty()) {
+                // whole section on screen
+                boolean inside = renderSection.getChunkArea().inFrustum(renderSection.frustumIndex) == FrustumIntersection.INSIDE;
+                // one test per section
+                boolean hidden = HiZ.enabled() && HiZ.occluded(renderSection.xOffset, renderSection.yOffset, renderSection.zOffset,
+                        renderSection.xOffset + 16, renderSection.yOffset + 16, renderSection.zOffset + 16);
                 for (BlockEntity blockEntity : list) {
-                    if (blockEntity.isRemoved()) continue;
+                    if (blockEntity.isRemoved() || !inside && !isVisible(dispatcher, blockEntity, frustum)) continue;
+                    if (hidden && occluded(dispatcher, blockEntity, renderSection)) continue;
 
                     BlockPos blockPos = blockEntity.getBlockPos();
+                    SortedSet<BlockDestructionProgress> sortedset = breaking ? destructionProgress.get(blockPos.asLong()) : null;
+                    if ((sortedset == null || sortedset.isEmpty()) && BlockEntityReplay.tryReplay(blockEntity,
+                            (float) (blockPos.getX() - camX), (float) (blockPos.getY() - camY), (float) (blockPos.getZ() - camZ), bufferSource))
+                        continue;
+
                     MultiBufferSource bufferSource1 = bufferSource;
                     poseStack.pushPose();
                     poseStack.translate((double) blockPos.getX() - camX, (double) blockPos.getY() - camY, (double) blockPos.getZ() - camZ);
-                    SortedSet<BlockDestructionProgress> sortedset = destructionProgress.get(blockPos.asLong());
                     if (sortedset != null && !sortedset.isEmpty()) {
                         int j1 = sortedset.last().getProgress();
                         if (j1 >= 0) {
@@ -433,12 +462,80 @@ public class WorldRenderer {
                         }
                     }
 
-                    this.minecraft.getBlockEntityRenderDispatcher().render(blockEntity, gameTime, poseStack, bufferSource1);
+                    BlockEntityBakery.setSkipBaked(bufferSource1 == bufferSource && partial.contains(blockEntity));
+                    BlockEntityReplay.render(dispatcher, blockEntity, gameTime, poseStack, bufferSource1);
+                    BlockEntityBakery.setSkipBaked(false);
                     poseStack.popPose();
                 }
             }
         }
+
+        if (!destructionProgress.isEmpty())
+            this.renderBakedCrumbling(poseStack, camX, camY, camZ, destructionProgress, gameTime);
     }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends BlockEntity> boolean occluded(BlockEntityRenderDispatcher dispatcher, BlockEntity blockEntity, RenderSection section) {
+        AABB bounds = BlockEntityReplay.cachedBounds(blockEntity);
+        if (bounds == null) {
+            BlockEntityRenderer<T> renderer = (BlockEntityRenderer<T>) dispatcher.getRenderer(blockEntity);
+            if (renderer == null)
+                return false;
+            bounds = renderer.getRenderBoundingBox((T) blockEntity);
+        }
+        // oversized boxes leave section
+        if (bounds.minX >= section.xOffset && bounds.minY >= section.yOffset && bounds.minZ >= section.zOffset
+                && bounds.maxX <= section.xOffset + 16 && bounds.maxY <= section.yOffset + 16 && bounds.maxZ <= section.zOffset + 16)
+            return true;
+        return HiZ.occluded(bounds);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends BlockEntity> boolean isVisible(BlockEntityRenderDispatcher dispatcher, BlockEntity blockEntity, VFrustum frustum) {
+        if (frustum == null)
+            return true;
+        AABB cached = BlockEntityReplay.cachedBounds(blockEntity);
+        if (cached != null)
+            return frustum.isVisible(cached);
+        BlockEntityRenderer<T> renderer = (BlockEntityRenderer<T>) dispatcher.getRenderer(blockEntity);
+        return renderer != null && frustum.isVisible(renderer.getRenderBoundingBox((T) blockEntity));
+    }
+
+    private void renderBakedCrumbling(PoseStack poseStack, double camX, double camY, double camZ,
+                                      Long2ObjectMap<SortedSet<BlockDestructionProgress>> destructionProgress, float gameTime) {
+        for (Long2ObjectMap.Entry<SortedSet<BlockDestructionProgress>> entry : destructionProgress.long2ObjectEntrySet()) {
+            SortedSet<BlockDestructionProgress> progress = entry.getValue();
+            if (progress.isEmpty() || progress.last().getProgress() < 0)
+                continue;
+
+            BlockPos blockPos = BlockPos.of(entry.getLongKey());
+            RenderSection section = this.sectionGrid.getSectionAtBlockPos(blockPos);
+            if (section == null)
+                continue;
+
+            for (BlockEntity blockEntity : section.getCompiledSection().getBakedBlockEntities()) {
+                if (blockEntity.isRemoved() || !blockEntity.getBlockPos().equals(blockPos))
+                    continue;
+
+                poseStack.pushPose();
+                poseStack.translate((double) blockPos.getX() - camX, (double) blockPos.getY() - camY, (double) blockPos.getZ() - camZ);
+                VertexConsumer crumbling = new SheetedDecalTextureGenerator(
+                        this.renderBuffers.crumblingBufferSource().getBuffer(ModelBakery.DESTROY_TYPES.get(progress.last().getProgress())), poseStack.last(), 1.0f);
+                this.minecraft.getBlockEntityRenderDispatcher().render(blockEntity, gameTime, poseStack,
+                        renderType -> renderType.affectsCrumbling() ? crumbling : NO_OUTPUT);
+                poseStack.popPose();
+            }
+        }
+    }
+
+    private static final VertexConsumer NO_OUTPUT = new VertexConsumer() {
+        public VertexConsumer addVertex(float x, float y, float z) { return this; }
+        public VertexConsumer setColor(int red, int green, int blue, int alpha) { return this; }
+        public VertexConsumer setUv(float u, float v) { return this; }
+        public VertexConsumer setUv1(int u, int v) { return this; }
+        public VertexConsumer setUv2(int u, int v) { return this; }
+        public VertexConsumer setNormal(float x, float y, float z) { return this; }
+    };
 
     public void scheduleGraphUpdate() {
         this.graphNeedsUpdate = true;
@@ -452,7 +549,15 @@ public class WorldRenderer {
         return this.sectionGraph.getSectionQueue().size();
     }
 
+    private static volatile long blockEpoch;
+
+    // bumps on block change
+    public static long getBlockEpoch() {
+        return blockEpoch;
+    }
+
     public void setSectionDirty(int x, int y, int z, boolean flag) {
+        blockEpoch++;
         this.sectionGrid.setDirty(x, y, z, flag);
 
         this.renderRegionCache.remove(x, z);
@@ -472,6 +577,14 @@ public class WorldRenderer {
 
     public short getLastFrame() {
         return this.sectionGraph.getLastFrame();
+    }
+
+    public boolean isSectionVisible(int x, int y, int z) {
+        if (this.sectionGrid == null)
+            return true;
+        RenderSection section = this.sectionGrid.getSectionAtBlockPos(x, y, z);
+        return section != null && section.xOffset == (x & ~15) && section.yOffset == (y & ~15) && section.zOffset == (z & ~15)
+                && section.getLastFrame() == this.sectionGraph.getLastFrame();
     }
 
     public int getRenderDistance() {
