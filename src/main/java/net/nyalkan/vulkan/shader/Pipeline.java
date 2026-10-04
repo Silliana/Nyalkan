@@ -274,8 +274,26 @@ public abstract class Pipeline {
         }
     }
 
+    private static VkCommandBuffer boundCommandBuffer;
+    private static long boundLayout, boundSet;
+    private static final int[] boundOffsets = new int[16];
+    private static int boundOffsetCount = -1;
+
+    public static void invalidateBoundSets() {
+        boundCommandBuffer = null;
+    }
+
     protected static class DescriptorSets {
         private final Pipeline pipeline;
+        private final long[] lastUB;
+        private final int[] lastEpoch;
+        private final int[] lastOffset;
+
+        private static final int REUSE_WINDOW = 16;
+        private final int keySize;
+        private final long[] key;
+        private long[] writtenKeys = new long[0];
+        private int writtenCount;
         private int poolSize = 10;
         private long descriptorPool;
         private LongBuffer sets;
@@ -291,6 +309,11 @@ public abstract class Pipeline {
             this.boundTextures = new ImageDescriptor.State[pipeline.imageDescriptors.size()];
             this.dynamicOffsets = MemoryUtil.memAllocInt(pipeline.buffers.size());
             this.boundUBs = new long[pipeline.buffers.size()];
+            this.lastUB = new long[pipeline.buffers.size()];
+            this.lastEpoch = new int[pipeline.buffers.size()];
+            this.lastOffset = new int[pipeline.buffers.size()];
+            this.keySize = pipeline.buffers.size() + pipeline.imageDescriptors.size() * 2;
+            this.key = new long[this.keySize];
 
             Arrays.setAll(boundTextures, i -> new ImageDescriptor.State(0, 0));
 
@@ -306,9 +329,41 @@ public abstract class Pipeline {
                 this.updateUniforms(uniformBuffer);
                 this.updateDescriptorSet(stack, uniformBuffer);
 
+                if (isBound(commandBuffer))
+                    return;
+
                 vkCmdBindDescriptorSets(commandBuffer, bindPoint, pipeline.pipelineLayout,
                         0, stack.longs(currentSet), dynamicOffsets);
             }
+        }
+
+        private boolean isBound(VkCommandBuffer commandBuffer) {
+            int count = this.dynamicOffsets.limit();
+            boolean same = commandBuffer == boundCommandBuffer && pipeline.pipelineLayout == boundLayout
+                    && this.currentSet == boundSet && count == boundOffsetCount && count <= boundOffsets.length;
+            for (int i = 0; same && i < count; i++)
+                same = boundOffsets[i] == this.dynamicOffsets.get(i);
+            if (same)
+                return true;
+
+            boundCommandBuffer = commandBuffer;
+            boundLayout = pipeline.pipelineLayout;
+            boundSet = this.currentSet;
+            boundOffsetCount = count <= boundOffsets.length ? count : -1;
+            for (int i = 0; i < count && i < boundOffsets.length; i++)
+                boundOffsets[i] = this.dynamicOffsets.get(i);
+            return false;
+        }
+
+        private static boolean sameBytes(long a, long b, int size) {
+            int i = 0;
+            for (; i + 8 <= size; i += 8)
+                if (MemoryUtil.memGetLong(a + i) != MemoryUtil.memGetLong(b + i))
+                    return false;
+            for (; i < size; i++)
+                if (MemoryUtil.memGetByte(a + i) != MemoryUtil.memGetByte(b + i))
+                    return false;
+            return true;
         }
 
         private void updateUniforms(UniformBuffer globalUB) {
@@ -317,18 +372,29 @@ public abstract class Pipeline {
                 boolean useOwnUB = ubo.getUniformBuffer() != null;
                 UniformBuffer ub = useOwnUB ? ubo.getUniformBuffer() : globalUB;
 
-                int currentOffset = (int) ub.getUsedBytes();
-                this.dynamicOffsets.put(i, currentOffset);
-
                 // TODO: non mappable memory
 
                 int alignedSize = UniformBuffer.getAlignedSize(ubo.getSize());
                 ub.checkCapacity(alignedSize);
 
+                int currentOffset = (int) ub.getUsedBytes();
+
                 if (!useOwnUB) {
-                    ubo.update(ub.getPointer());
-                    ub.updateOffset(alignedSize);
+                    long ptr = ub.getPointer();
+                    ubo.update(ptr);
+
+                    if (this.lastUB[i] == ub.getId() && this.lastEpoch[i] == ub.getEpoch()
+                            && sameBytes(ub.getBasePointer() + this.lastOffset[i], ptr, ubo.getSize())) {
+                        currentOffset = this.lastOffset[i];
+                    } else {
+                        this.lastUB[i] = ub.getId();
+                        this.lastEpoch[i] = ub.getEpoch();
+                        this.lastOffset[i] = currentOffset;
+                        ub.updateOffset(alignedSize);
+                    }
                 }
+
+                this.dynamicOffsets.put(i, currentOffset);
 
                 ++i;
             }
@@ -367,6 +433,55 @@ public abstract class Pipeline {
             return false;
         }
 
+        private void buildKey(UniformBuffer uniformBuffer) {
+            int k = 0;
+            for (int j = 0; j < pipeline.buffers.size(); ++j) {
+                UniformBuffer ub = pipeline.buffers.get(j).getUniformBuffer();
+                this.key[k++] = (ub != null ? ub : uniformBuffer).getId();
+            }
+
+            for (int j = 0; j < pipeline.imageDescriptors.size(); ++j) {
+                ImageDescriptor imageDescriptor = pipeline.imageDescriptors.get(j);
+                VulkanImage image = imageDescriptor.getImage();
+                if (imageDescriptor.isReadOnlyLayout)
+                    image.readOnlyLayout();
+
+                this.key[k++] = imageDescriptor.getImageView(image);
+                this.key[k++] = image.getSampler();
+            }
+        }
+
+        private boolean reuseWrittenSet(UniformBuffer uniformBuffer) {
+            this.buildKey(uniformBuffer);
+
+            int keySize = this.keySize;
+            int oldest = Math.max(0, this.writtenCount - REUSE_WINDOW);
+            for (int idx = this.writtenCount - 1; idx >= oldest; --idx) {
+                if (!Arrays.equals(this.writtenKeys, idx * keySize, idx * keySize + keySize, this.key, 0, keySize))
+                    continue;
+
+                this.currentSet = this.sets.get(idx);
+                int k = 0;
+                for (int j = 0; j < this.boundUBs.length; ++j)
+                    this.boundUBs[j] = this.key[k++];
+                for (ImageDescriptor.State state : this.boundTextures) {
+                    state.set(this.key[k], this.key[k + 1]);
+                    k += 2;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        private void recordWrittenSet() {
+            int needed = (this.currentIdx + 1) * this.keySize;
+            if (this.writtenKeys.length < needed)
+                this.writtenKeys = Arrays.copyOf(this.writtenKeys, Math.max(needed, this.writtenKeys.length * 2));
+
+            System.arraycopy(this.key, 0, this.writtenKeys, this.currentIdx * this.keySize, this.keySize);
+            this.writtenCount = this.currentIdx + 1;
+        }
+
         private void checkPoolSize(MemoryStack stack) {
             if (this.currentIdx >= this.poolSize) {
                 this.poolSize *= 2;
@@ -383,12 +498,18 @@ public abstract class Pipeline {
             if (!needsUpdate(uniformBuffer))
                 return;
 
+            if (reuseWrittenSet(uniformBuffer))
+                return;
+
             this.currentIdx++;
 
             //Check pool size
+            if (this.currentIdx >= this.poolSize)
+                this.writtenCount = 0;
             checkPoolSize(stack);
 
             this.currentSet = this.sets.get(this.currentIdx);
+            this.recordWrittenSet();
 
             VkWriteDescriptorSet.Buffer descriptorWrites = VkWriteDescriptorSet.calloc(pipeline.buffers.size() + pipeline.imageDescriptors.size(), stack);
             VkDescriptorBufferInfo.Buffer[] bufferInfos = new VkDescriptorBufferInfo.Buffer[pipeline.buffers.size()];
@@ -515,6 +636,7 @@ public abstract class Pipeline {
 
         public void resetIdx() {
             this.currentIdx = -1;
+            this.writtenCount = 0;
         }
 
         private void cleanUp() {
