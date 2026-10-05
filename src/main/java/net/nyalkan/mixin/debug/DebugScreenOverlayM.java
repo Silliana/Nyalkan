@@ -72,6 +72,7 @@ public abstract class DebugScreenOverlayM {
             strings.add(String.format("Off-heap: " + getOffHeapMemory() + "MB"));
             strings.add("NativeMemory: %dMB".formatted(MemoryManager.getInstance().getNativeMemoryMB()));
             strings.add("DeviceMemory: %dMB".formatted(MemoryManager.getInstance().getAllocatedDeviceMemoryMB()));
+            strings.add(MemoryManager.getInstance().getVramLine());
             strings.add("");
             strings.add("Nyalkan " + getVersion());
             strings.add("CPU: " + SystemInfo.cpuInfo);
@@ -81,11 +82,13 @@ public abstract class DebugScreenOverlayM {
             strings.add("");
             strings.add("");
 
+            net.nyalkan.render.gui.HudCache.addDebugLines(strings);
+            net.nyalkan.render.SkyColorCache.addDebugLines(strings);
             if (WorldRenderer.getInstance() != null && WorldRenderer.getInstance().getChunkAreaManager() != null) {
                 Collections.addAll(strings, WorldRenderer.getInstance().getChunkAreaManager().getStats());
             }
 
-            cachedSystemInfo = strings;
+            cachedSystemInfo = new ArrayList<>(strings);
             return strings;
         } catch (Throwable t) {
             net.nyalkan.Initializer.LOGGER.error("[Nyalkan] F3 system information failed to build", t);

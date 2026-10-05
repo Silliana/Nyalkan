@@ -17,7 +17,7 @@ import static org.lwjgl.vulkan.VK12.VK_SAMPLER_REDUCTION_MODE_MAX;
 import static org.lwjgl.vulkan.VK12.VK_SAMPLER_REDUCTION_MODE_MIN;
 
 public abstract class SamplerManager {
-    static final float MIP_BIAS = -0.5f;
+    static final float MIP_BIAS = 0.0f;
 
     static final Short2LongMap SAMPLERS = new Short2LongOpenHashMap();
 

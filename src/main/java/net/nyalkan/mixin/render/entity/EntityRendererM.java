@@ -1,6 +1,8 @@
 package net.nyalkan.mixin.render.entity;
 
 import net.minecraft.client.Minecraft;
+import net.nyalkan.interfaces.FrustumMixed;
+import net.nyalkan.render.chunk.frustum.VFrustum;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.world.entity.Entity;
@@ -54,10 +56,11 @@ public class EntityRendererM<T extends Entity> {
 
             RenderSection section = worldRenderer.getSectionGrid().getSectionAtBlockPos((int) pos.x(), (int) pos.y(), (int) pos.z());
 
+            VFrustum vFrustum = ((FrustumMixed) frustum).customFrustum();
             if(section == null)
-                return frustum.isVisible(aABB);
+                return vFrustum.isVisible(aABB);
 
-            return worldRenderer.getLastFrame() == section.getLastFrame();
+            return worldRenderer.getLastFrame() == section.getLastFrame() && vFrustum.isVisible(aABB);
         } else {
             return frustum.isVisible(aABB);
         }
