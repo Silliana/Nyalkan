@@ -49,6 +49,9 @@ public abstract class VRenderSystem {
     public static int stencilZFail = GL11.GL_KEEP;
     public static int stencilZPass = GL11.GL_KEEP;
 
+    public static boolean scissorTest = false;
+    public static final int[] scissorBox = new int[4];
+
     public static boolean logicOp = false;
     public static int logicOpFun = 0;
 
@@ -172,8 +175,13 @@ public abstract class VRenderSystem {
         ColorUtil.setRGBA_Buffer(clearColor, f1, f2, f3, f4);
     }
 
+    public static java.util.function.IntUnaryOperator clearFilter;
+
     public static void clear(int mask) {
-        Renderer.clearAttachments(mask);
+        if (clearFilter != null)
+            mask = clearFilter.applyAsInt(mask);
+        if (mask != 0)
+            Renderer.clearAttachments(mask);
     }
 
     public static void clearDepth(double depth) {

@@ -76,12 +76,15 @@ public class PipelineState {
 
     final RenderPass renderPass;
 
-    int assemblyRasterState;
-    int blendState_i;
-    int depthState_i;
-    int colorMask_i;
-    int logicOp_i;
-    int stencilState_i;
+    final int assemblyRasterState;
+    final int blendState_i;
+    final int depthState_i;
+    final int colorMask_i;
+    final int logicOp_i;
+    final int stencilState_i;
+
+    // fields are final
+    private final int hash;
 
     public PipelineState(int assemblyRasterState, int blendState, int depthState, int logicOp, int colorMask, int stencilState, RenderPass renderPass) {
         this.renderPass = renderPass;
@@ -92,6 +95,8 @@ public class PipelineState {
         this.colorMask_i = colorMask;
         this.logicOp_i = logicOp;
         this.stencilState_i = stencilState;
+
+        this.hash = Objects.hash(blendState_i, depthState_i, logicOp_i, assemblyRasterState, colorMask_i, stencilState_i, renderPass);
     }
 
     private boolean checkEquals(int assemblyRasterState, int blendState, int depthState, int logicOp, int colorMask, int stencilState, RenderPass renderPass) {
@@ -119,7 +124,7 @@ public class PipelineState {
 
     @Override
     public int hashCode() {
-        return Objects.hash(blendState_i, depthState_i, logicOp_i, assemblyRasterState, colorMask_i, stencilState_i, renderPass);
+        return this.hash;
     }
 
     public static BlendInfo defaultBlendInfo() {
@@ -257,6 +262,10 @@ public class PipelineState {
         public static final int FUN_OFFSET = 20;
 
         public static final int ENABLE_BIT = 1 << 24;
+        public static final int OPAQUE_ALPHA_BIT = 1 << 25;
+
+        public static boolean coverageAlpha;
+        public static int unsupportedBlend = -1;
 
         public static final int OP_MASK = 0xF;
         public static final int FACTOR_MASK = 0x1F;
@@ -266,11 +275,40 @@ public class PipelineState {
             s |= blendInfo.enabled ? ENABLE_BIT : 0;
             s |= encode(blendInfo.srcRgbFactor, SRC_RGB_OFFSET, FACTOR_MASK);
             s |= encode(blendInfo.dstRgbFactor, DST_RGB_OFFSET, FACTOR_MASK);
-            s |= encode(blendInfo.srcAlphaFactor, SRC_A_OFFSET, FACTOR_MASK);
-            s |= encode(blendInfo.dstAlphaFactor, DST_A_OFFSET, FACTOR_MASK);
+            int srcAlpha = blendInfo.srcAlphaFactor;
+            int dstAlpha = blendInfo.dstAlphaFactor;
+            if (coverageAlpha && blendInfo.enabled) {
+                boolean over = (blendInfo.srcRgbFactor == VK_BLEND_FACTOR_SRC_ALPHA || blendInfo.srcRgbFactor == VK_BLEND_FACTOR_ONE)
+                        && blendInfo.dstRgbFactor == VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                // glint adds source colour
+                boolean additive = blendInfo.dstRgbFactor == VK_BLEND_FACTOR_ONE && blendInfo.blendOp == VK_BLEND_OP_ADD
+                        && sourceOnly(blendInfo.srcRgbFactor);
+                if (over) {
+                    srcAlpha = VK_BLEND_FACTOR_ONE;
+                    dstAlpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                } else {
+                    srcAlpha = VK_BLEND_FACTOR_ZERO;
+                    dstAlpha = VK_BLEND_FACTOR_ONE;
+                    if (!additive)
+                        unsupportedBlend = blendInfo.srcRgbFactor << 8 | blendInfo.dstRgbFactor;
+                }
+            }
+            // opaque stores solid alpha
+            if (coverageAlpha && !blendInfo.enabled)
+                s |= OPAQUE_ALPHA_BIT;
+            s |= encode(srcAlpha, SRC_A_OFFSET, FACTOR_MASK);
+            s |= encode(dstAlpha, DST_A_OFFSET, FACTOR_MASK);
             s |= encode(blendInfo.blendOp, FUN_OFFSET, OP_MASK);
 
             return s;
+        }
+
+        private static boolean sourceOnly(int factor) {
+            return switch (factor) {
+                case VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_COLOR, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+                     VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA -> true;
+                default -> false;
+            };
         }
 
         public static boolean enable(int i) {
