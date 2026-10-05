@@ -1,5 +1,7 @@
 package net.nyalkan.vulkan;
 
+import net.nyalkan.render.immediate.ImmediateBatcher;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.client.Minecraft;
@@ -22,6 +24,7 @@ import net.nyalkan.vulkan.shader.PipelineState;
 import net.nyalkan.vulkan.shader.Uniforms;
 import net.nyalkan.vulkan.shader.layout.PushConstants;
 import net.nyalkan.vulkan.texture.VTextureSelector;
+import net.nyalkan.vulkan.texture.VulkanImage;
 import net.nyalkan.vulkan.util.VUtil;
 import net.nyalkan.vulkan.util.VkResult;
 import org.lwjgl.PointerBuffer;
@@ -33,6 +36,7 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -90,6 +94,25 @@ public class Renderer {
     private Framebuffer boundFramebuffer;
     private RenderPass boundRenderPass;
 
+    private List<VkCommandBuffer> hudCommandBuffers;
+    private boolean hudBegun;
+    private VkCommandBuffer mainCmdBuffer;
+    private final CmdState mainState = new CmdState();
+    private final CmdState hudState = new CmdState();
+    private GlFramebuffer.Binding mainBinding;
+
+    private static final class CmdState {
+        Framebuffer framebuffer;
+        RenderPass renderPass;
+        Pipeline pipeline;
+        long pipelineHandle;
+        int stencilRef, stencilCompareMask, stencilWriteMask;
+        final float[] blendColor = new float[4];
+        float depthBiasUnits, depthBiasFactor;
+        boolean invertedViewport;
+        int labels;
+    }
+
     private static int currentFrame = 0;
     private static int imageIndex;
     private static int lastReset = -1;
@@ -132,6 +155,9 @@ public class Renderer {
         if (commandBuffers != null) {
             commandBuffers.forEach(commandBuffer -> vkFreeCommandBuffers(device, Vulkan.getCommandPool(), commandBuffer));
         }
+        if (hudCommandBuffers != null) {
+            hudCommandBuffers.forEach(commandBuffer -> vkFreeCommandBuffers(device, Vulkan.getCommandPool(), commandBuffer));
+        }
 
         commandBuffers = new ArrayList<>(framesNum);
 
@@ -153,6 +179,17 @@ public class Renderer {
             for (int i = 0; i < framesNum; i++) {
                 commandBuffers.add(new VkCommandBuffer(pCommandBuffers.get(i), device));
             }
+
+            vkResult = vkAllocateCommandBuffers(device, allocInfo, pCommandBuffers);
+            if (vkResult != VK_SUCCESS) {
+                throw new RuntimeException("Failed to allocate command buffers: %s".formatted(VkResult.decode(vkResult)));
+            }
+
+            hudCommandBuffers = new ArrayList<>(framesNum);
+            for (int i = 0; i < framesNum; i++) {
+                hudCommandBuffers.add(new VkCommandBuffer(pCommandBuffers.get(i), device));
+            }
+            hudBegun = false;
         }
     }
 
@@ -226,6 +263,8 @@ public class Renderer {
 
         currentCmdBuffer = commandBuffers.get(currentFrame);
         vkResetCommandBuffer(currentCmdBuffer, 0);
+        hudBegun = false;
+        mainCmdBuffer = null;
 
         try (MemoryStack stack = stackPush()) {
 
@@ -265,18 +304,35 @@ public class Renderer {
         }
 
         recordingCmds = true;
+        drawer.invalidateBindings();
+        Pipeline.invalidateBoundSets();
+        openLabels = 0;
+        labelEpoch++;
         mainPass.begin(commandBuffer, stack);
 
         resetDynamicState(commandBuffer);
     }
 
+    private static long frameCount;
+
+    public static long getFrameCount() {
+        return frameCount;
+    }
+
     public void endFrame() {
+        frameCount++;
+
         if (skipRendering || !recordingCmds)
             return;
+
+        // pending draws before submit
+        ImmediateBatcher.INSTANCE.flush();
 
         Profiler p = Profiler.getMainProfiler();
         p.push("End_rendering");
 
+        endHudRecording(null);
+        closeDebugSections(currentCmdBuffer);
         mainPass.end(currentCmdBuffer);
 
         submitFrame();
@@ -302,7 +358,8 @@ public class Renderer {
 
             submitInfo.pSignalSemaphores(stack.longs(renderFinishedSemaphores.get(currentFrame)));
 
-            submitInfo.pCommandBuffers(stack.pointers(currentCmdBuffer));
+            VkCommandBuffer hud = finishHudBuffer();
+            submitInfo.pCommandBuffers(hud != null ? stack.pointers(hud, currentCmdBuffer) : stack.pointers(currentCmdBuffer));
 
             vkResetFences(device, inFlightFences.get(currentFrame));
 
@@ -346,13 +403,16 @@ public class Renderer {
         try (MemoryStack stack = stackPush()) {
             int vkResult;
 
+            endHudRecording(null);
             this.endRenderPass(currentCmdBuffer);
+            closeDebugSections(currentCmdBuffer);
             vkEndCommandBuffer(currentCmdBuffer);
 
             VkSubmitInfo submitInfo = VkSubmitInfo.calloc(stack);
             submitInfo.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO);
 
-            submitInfo.pCommandBuffers(stack.pointers(currentCmdBuffer));
+            VkCommandBuffer hud = finishHudBuffer();
+            submitInfo.pCommandBuffers(hud != null ? stack.pointers(hud, currentCmdBuffer) : stack.pointers(currentCmdBuffer));
 
             vkResetFences(device, inFlightFences.get(currentFrame));
 
@@ -463,8 +523,20 @@ public class Renderer {
     private void recreateSwapChain() {
         Synchronization.INSTANCE.waitFences();
         Vulkan.waitIdle();
+        MemoryManager.setImmediateFree(true);
+        try {
+            this.recreateSwapChainIdle();
+        } finally {
+            MemoryManager.setImmediateFree(false);
+        }
+    }
+
+    private void recreateSwapChainIdle() {
 
         commandBuffers.forEach(commandBuffer -> vkResetCommandBuffer(commandBuffer, 0));
+        hudCommandBuffers.forEach(commandBuffer -> vkResetCommandBuffer(commandBuffer, 0));
+        hudBegun = false;
+        mainCmdBuffer = null;
 
         Vulkan.getSwapChain().recreate();
 
@@ -512,6 +584,10 @@ public class Renderer {
         }
     }
 
+    public Framebuffer getBoundFramebuffer() {
+        return this.boundFramebuffer;
+    }
+
     public void setBoundFramebuffer(Framebuffer framebuffer) {
         this.boundFramebuffer = framebuffer;
     }
@@ -537,6 +613,11 @@ public class Renderer {
     }
 
     public void bindGraphicsPipeline(GraphicsPipeline pipeline) {
+        bindGraphicsPipeline(pipeline, null);
+    }
+
+    // optional buffer format
+    public void bindGraphicsPipeline(GraphicsPipeline pipeline, VertexFormat bufferFormat) {
         VkCommandBuffer commandBuffer = currentCmdBuffer;
 
         // lazy main target bind
@@ -545,13 +626,24 @@ public class Renderer {
         }
 
         PipelineState currentState = PipelineState.getCurrentPipelineState(boundRenderPass);
-        final long handle = pipeline.getHandle(currentState);
+        final long handle = bufferFormat != null ? pipeline.getHandle(currentState, bufferFormat) : pipeline.getHandle(currentState);
 
-        // not baked into pipeline
-        vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilRef);
-        vkCmdSetStencilCompareMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilFuncMask);
-        vkCmdSetStencilWriteMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilWriteMask);
-        vkCmdSetBlendConstants(commandBuffer, VRenderSystem.blendColor);
+        if (recordedStencilRef != VRenderSystem.stencilRef) {
+            vkCmdSetStencilReference(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilRef);
+            recordedStencilRef = VRenderSystem.stencilRef;
+        }
+        if (recordedStencilCompareMask != VRenderSystem.stencilFuncMask) {
+            vkCmdSetStencilCompareMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilFuncMask);
+            recordedStencilCompareMask = VRenderSystem.stencilFuncMask;
+        }
+        if (recordedStencilWriteMask != VRenderSystem.stencilWriteMask) {
+            vkCmdSetStencilWriteMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, VRenderSystem.stencilWriteMask);
+            recordedStencilWriteMask = VRenderSystem.stencilWriteMask;
+        }
+        if (!Arrays.equals(recordedBlendColor, VRenderSystem.blendColor)) {
+            vkCmdSetBlendConstants(commandBuffer, VRenderSystem.blendColor);
+            System.arraycopy(VRenderSystem.blendColor, 0, recordedBlendColor, 0, 4);
+        }
 
         if (boundPipelineHandle == handle) {
             return;
@@ -587,8 +679,14 @@ public class Renderer {
         return boundPipeline;
     }
 
+    // values recorded in currentCmdBuffer
+    private static int recordedStencilRef, recordedStencilCompareMask, recordedStencilWriteMask;
+    private static final float[] recordedBlendColor = new float[4];
+
     private static void resetDynamicState(VkCommandBuffer commandBuffer) {
         vkCmdSetDepthBias(commandBuffer, 0.0F, 0.0F, 0.0F);
+        depthBiasUnits = 0.0F;
+        depthBiasFactor = 0.0F;
 
         vkCmdSetLineWidth(commandBuffer, 1.0F);
 
@@ -596,12 +694,30 @@ public class Renderer {
         vkCmdSetStencilCompareMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
         vkCmdSetStencilWriteMask(commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
         vkCmdSetBlendConstants(commandBuffer, new float[]{0.0f, 0.0f, 0.0f, 0.0f});
+
+        recordedStencilRef = 0;
+        recordedStencilCompareMask = 0xFF;
+        recordedStencilWriteMask = 0xFF;
+        Arrays.fill(recordedBlendColor, 0.0f);
     }
+
+    // last applied depth bias
+    private static float depthBiasUnits, depthBiasFactor;
 
     public static void setDepthBias(float units, float factor) {
         VkCommandBuffer commandBuffer = INSTANCE.currentCmdBuffer;
 
         vkCmdSetDepthBias(commandBuffer, units, 0.0f, factor);
+        depthBiasUnits = units;
+        depthBiasFactor = factor;
+    }
+
+    public static float getDepthBiasUnits() {
+        return depthBiasUnits;
+    }
+
+    public static float getDepthBiasFactor() {
+        return depthBiasFactor;
     }
 
     public static void clearAttachments(int v) {
@@ -740,31 +856,151 @@ public class Renderer {
         }
     }
 
-    public static void pushDebugSection(String s) {
-        if (Vulkan.ENABLE_VALIDATION_LAYERS) {
-            VkCommandBuffer commandBuffer = INSTANCE.currentCmdBuffer;
+    private static int openLabels;
+    private static int labelEpoch;
 
-            try (MemoryStack stack = stackPush()) {
-                VkDebugUtilsLabelEXT markerInfo = VkDebugUtilsLabelEXT.calloc(stack);
-                markerInfo.sType(VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT);
-                ByteBuffer string = stack.UTF8(s);
-                markerInfo.pLabelName(string);
-                vkCmdBeginDebugUtilsLabelEXT(commandBuffer, markerInfo);
-            }
+    public static int getLabelEpoch() {
+        return labelEpoch;
+    }
+
+    public static boolean pushDebugSection(String s) {
+        if (!Vulkan.DEBUG_UTILS || INSTANCE == null || !INSTANCE.recordingCmds)
+            return false;
+
+        try (MemoryStack stack = stackPush()) {
+            VkDebugUtilsLabelEXT markerInfo = VkDebugUtilsLabelEXT.calloc(stack);
+            markerInfo.sType(VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT);
+            markerInfo.pLabelName(stack.UTF8(s));
+            vkCmdBeginDebugUtilsLabelEXT(INSTANCE.currentCmdBuffer, markerInfo);
         }
+        openLabels++;
+        return true;
     }
 
     public static void popDebugSection() {
-        if (Vulkan.ENABLE_VALIDATION_LAYERS) {
-            VkCommandBuffer commandBuffer = INSTANCE.currentCmdBuffer;
+        if (!Vulkan.DEBUG_UTILS || INSTANCE == null || !INSTANCE.recordingCmds || openLabels == 0)
+            return;
 
-            vkCmdEndDebugUtilsLabelEXT(commandBuffer);
-        }
+        vkCmdEndDebugUtilsLabelEXT(INSTANCE.currentCmdBuffer);
+        openLabels--;
     }
 
     public static void popPushDebugSection(String s) {
         popDebugSection();
         pushDebugSection(s);
+    }
+
+    public static void closeDebugSections(VkCommandBuffer commandBuffer) {
+        if (!Vulkan.DEBUG_UTILS)
+            return;
+
+        for (; openLabels > 0; openLabels--)
+            vkCmdEndDebugUtilsLabelEXT(commandBuffer);
+        labelEpoch++;
+    }
+
+    public boolean isRecordingHud() {
+        return this.mainCmdBuffer != null;
+    }
+
+    public boolean beginHudRecording() {
+        if (!this.recordingCmds || skipRendering || this.mainCmdBuffer != null)
+            return false;
+
+        this.saveState(this.mainState);
+        this.mainBinding = GlFramebuffer.saveBinding();
+        this.mainCmdBuffer = this.currentCmdBuffer;
+
+        VkCommandBuffer hud = this.hudCommandBuffers.get(currentFrame);
+        this.currentCmdBuffer = hud;
+        GlFramebuffer.resetBoundFramebuffer();
+
+        if (!this.hudBegun) {
+            vkResetCommandBuffer(hud, 0);
+            try (MemoryStack stack = stackPush()) {
+                VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack);
+                beginInfo.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+                beginInfo.flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+                vkBeginCommandBuffer(hud, beginInfo);
+            }
+            this.hudBegun = true;
+
+            this.boundFramebuffer = null;
+            this.boundRenderPass = null;
+            this.boundPipeline = null;
+            this.boundPipelineHandle = 0;
+            openLabels = 0;
+            VRenderSystem.invertedViewport = false;
+            resetDynamicState(hud);
+        } else {
+            this.loadState(this.hudState);
+        }
+        return true;
+    }
+
+    public void endHudRecording(VulkanImage[] readImages) {
+        if (this.mainCmdBuffer == null)
+            return;
+
+        this.endRenderPass(this.currentCmdBuffer);
+        if (readImages != null) {
+            try (MemoryStack stack = stackPush()) {
+                for (VulkanImage image : readImages)
+                    image.readOnlyLayout(stack, this.currentCmdBuffer);
+            }
+        }
+
+        this.saveState(this.hudState);
+        this.currentCmdBuffer = this.mainCmdBuffer;
+        this.mainCmdBuffer = null;
+        this.loadState(this.mainState);
+        GlFramebuffer.restoreBinding(this.mainBinding);
+    }
+
+    private VkCommandBuffer finishHudBuffer() {
+        if (!this.hudBegun)
+            return null;
+
+        VkCommandBuffer hud = this.hudCommandBuffers.get(currentFrame);
+        if (Vulkan.DEBUG_UTILS) {
+            int labels = openLabels;
+            openLabels = this.hudState.labels;
+            closeDebugSections(hud);
+            openLabels = labels;
+        }
+        vkEndCommandBuffer(hud);
+        this.hudBegun = false;
+        return hud;
+    }
+
+    private void saveState(CmdState state) {
+        state.framebuffer = this.boundFramebuffer;
+        state.renderPass = this.boundRenderPass;
+        state.pipeline = this.boundPipeline;
+        state.pipelineHandle = this.boundPipelineHandle;
+        state.stencilRef = recordedStencilRef;
+        state.stencilCompareMask = recordedStencilCompareMask;
+        state.stencilWriteMask = recordedStencilWriteMask;
+        System.arraycopy(recordedBlendColor, 0, state.blendColor, 0, 4);
+        state.depthBiasUnits = depthBiasUnits;
+        state.depthBiasFactor = depthBiasFactor;
+        state.invertedViewport = VRenderSystem.invertedViewport;
+        state.labels = openLabels;
+    }
+
+    private void loadState(CmdState state) {
+        this.boundFramebuffer = state.framebuffer;
+        this.boundRenderPass = state.renderPass;
+        this.boundPipeline = state.pipeline;
+        this.boundPipelineHandle = state.pipelineHandle;
+        recordedStencilRef = state.stencilRef;
+        recordedStencilCompareMask = state.stencilCompareMask;
+        recordedStencilWriteMask = state.stencilWriteMask;
+        System.arraycopy(state.blendColor, 0, recordedBlendColor, 0, 4);
+        depthBiasUnits = state.depthBiasUnits;
+        depthBiasFactor = state.depthBiasFactor;
+        VRenderSystem.invertedViewport = state.invertedViewport;
+        openLabels = state.labels;
     }
 
     public static int getFramesNum() {
