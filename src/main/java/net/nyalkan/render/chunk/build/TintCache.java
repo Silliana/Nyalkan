@@ -58,6 +58,11 @@ public class TintCache {
         }
     }
 
+    public static boolean isCached(ColorResolver colorResolver) {
+        return colorResolver == BiomeColors.GRASS_COLOR_RESOLVER || colorResolver == BiomeColors.FOLIAGE_COLOR_RESOLVER
+                || colorResolver == BiomeColors.WATER_COLOR_RESOLVER;
+    }
+
     public int getColor(BlockPos blockPos, ColorResolver colorResolver) {
         int relY = blockPos.getY() & 15;
         Layer layer = layers[relY];

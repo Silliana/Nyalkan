@@ -34,7 +34,7 @@ public interface VertexBuilder {
     }
 
     class CompressedVertexBuilder implements VertexBuilder {
-        private static final int VERTEX_SIZE = 20;
+        private static final int VERTEX_SIZE = 16;
 
         public static final float POS_CONV_MUL = 2048.0f;
         public static final float POS_OFFSET = -4.0f;
@@ -53,9 +53,9 @@ public interface VertexBuilder {
                 Initializer.LOGGER.warn("[POS_OVERFLOW] local=({},{},{}) packed=({},{},{})", x, y, z, rawX, rawY, rawZ);
             }
 
-            final short sX = (short) rawX;
-            final short sY = (short) rawY;
-            final short sZ = (short) rawZ;
+            final short sX = pack(rawX);
+            final short sY = pack(rawY);
+            final short sZ = pack(rawZ);
 
             MemoryUtil.memPutShort(ptr + 0, sX);
             MemoryUtil.memPutShort(ptr + 2, sY);
@@ -73,6 +73,14 @@ public interface VertexBuilder {
         @Override
         public int getStride() {
             return VERTEX_SIZE;
+        }
+
+        private static short pack(float raw) {
+            int packed = (int) raw;
+            float rest = raw - packed;
+            if (packed % (int) POS_CONV_MUL == 0 && Math.abs(rest) > 0.05f)
+                packed += rest > 0 ? 1 : -1;
+            return (short) packed;
         }
 
         private static boolean isOutOfShortRange(float v) {

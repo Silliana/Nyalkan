@@ -5,6 +5,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.nyalkan.gl.GlTexture;
 import net.nyalkan.vulkan.Renderer;
+import net.nyalkan.render.immediate.ImmediateBatcher;
 import net.nyalkan.vulkan.VRenderSystem;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -16,6 +17,10 @@ import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.objectweb.asm.Opcodes;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 
 import java.util.function.Consumer;
 
@@ -36,6 +41,7 @@ public abstract class RenderSystemMixin {
     @Shadow @Final private static float[] shaderFogColor;
 
     @Shadow private static @Nullable Thread renderThread;
+    @Shadow private static double lastDrawTime;
 
     @Shadow
     public static void assertOnRenderThread() {
@@ -223,6 +229,11 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     public static void setShaderLights(Vector3f dir0, Vector3f dir1) {
+        if (VRenderSystem.lightDirection0.buffer.getFloat(0) != dir0.x() || VRenderSystem.lightDirection0.buffer.getFloat(4) != dir0.y()
+                || VRenderSystem.lightDirection0.buffer.getFloat(8) != dir0.z() || VRenderSystem.lightDirection1.buffer.getFloat(0) != dir1.x()
+                || VRenderSystem.lightDirection1.buffer.getFloat(4) != dir1.y() || VRenderSystem.lightDirection1.buffer.getFloat(8) != dir1.z())
+            ImmediateBatcher.INSTANCE.beforeStateChange();
+
         shaderLightDirections[0] = dir0;
         shaderLightDirections[1] = dir1;
 
@@ -237,6 +248,9 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     private static void _setShaderColor(float r, float g, float b, float a) {
+        if (shaderColor[0] != r || shaderColor[1] != g || shaderColor[2] != b || shaderColor[3] != a)
+            ImmediateBatcher.INSTANCE.beforeStateChange();
+
         shaderColor[0] = r;
         shaderColor[1] = g;
         shaderColor[2] = b;
@@ -247,6 +261,9 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     public static void setShaderFogColor(float f, float g, float h, float i) {
+        if (shaderFogColor[0] != f || shaderFogColor[1] != g || shaderFogColor[2] != h || shaderFogColor[3] != i)
+            ImmediateBatcher.INSTANCE.beforeStateChange();
+
         shaderFogColor[0] = f;
         shaderFogColor[1] = g;
         shaderFogColor[2] = h;
@@ -260,12 +277,15 @@ public abstract class RenderSystemMixin {
         Matrix4f matrix4f = new Matrix4f(projectionMatrix);
         if (!isOnRenderThread()) {
             recordRenderCall(() -> {
+                ImmediateBatcher.INSTANCE.beforeStateChange();
                 RenderSystemMixin.projectionMatrix = matrix4f;
 
                 VRenderSystem.applyProjectionMatrix(matrix4f);
                 VRenderSystem.calculateMVP();
             });
         } else {
+            if (!RenderSystemMixin.projectionMatrix.equals(matrix4f))
+                ImmediateBatcher.INSTANCE.beforeStateChange();
             RenderSystemMixin.projectionMatrix = matrix4f;
 
             VRenderSystem.applyProjectionMatrix(matrix4f);
@@ -279,10 +299,13 @@ public abstract class RenderSystemMixin {
         Matrix4f matrix4f2 = new Matrix4f(matrix4f);
         if (!RenderSystem.isOnRenderThread()) {
             RenderSystem.recordRenderCall(() -> {
+                ImmediateBatcher.INSTANCE.beforeStateChange();
                 textureMatrix = matrix4f2;
                 VRenderSystem.setTextureMatrix(matrix4f);
             });
         } else {
+            if (!textureMatrix.equals(matrix4f2))
+                ImmediateBatcher.INSTANCE.beforeStateChange();
             textureMatrix = matrix4f2;
             VRenderSystem.setTextureMatrix(matrix4f);
         }
@@ -291,8 +314,13 @@ public abstract class RenderSystemMixin {
     @Overwrite(remap = false)
     public static void resetTextureMatrix() {
         if (!RenderSystem.isOnRenderThread()) {
-            RenderSystem.recordRenderCall(() -> textureMatrix.identity());
+            RenderSystem.recordRenderCall(() -> {
+                ImmediateBatcher.INSTANCE.beforeStateChange();
+                textureMatrix.identity();
+            });
         } else {
+            if ((textureMatrix.properties() & Matrix4f.PROPERTY_IDENTITY) == 0)
+                ImmediateBatcher.INSTANCE.beforeStateChange();
             textureMatrix.identity();
             VRenderSystem.setTextureMatrix(textureMatrix);
         }
@@ -303,12 +331,15 @@ public abstract class RenderSystemMixin {
         Matrix4f matrix4f = new Matrix4f(modelViewStack);
         if (!isOnRenderThread()) {
             recordRenderCall(() -> {
+                ImmediateBatcher.INSTANCE.beforeStateChange();
                 modelViewMatrix = matrix4f;
                 //Vulkan
                 VRenderSystem.applyModelViewMatrix(matrix4f);
                 VRenderSystem.calculateMVP();
             });
         } else {
+            if (!modelViewMatrix.equals(matrix4f))
+                ImmediateBatcher.INSTANCE.beforeStateChange();
             modelViewMatrix = matrix4f;
 
             VRenderSystem.applyModelViewMatrix(matrix4f);
@@ -319,6 +350,8 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     private static void _restoreProjectionMatrix() {
+        if (!projectionMatrix.equals(savedProjectionMatrix))
+            ImmediateBatcher.INSTANCE.beforeStateChange();
         projectionMatrix = savedProjectionMatrix;
 
         VRenderSystem.applyProjectionMatrix(projectionMatrix);
@@ -328,5 +361,11 @@ public abstract class RenderSystemMixin {
     @Overwrite(remap = false)
     public static void texParameter(int target, int pname, int param) {
         GlTexture.texParameteri(target, pname, param);
+    }
+
+    @WrapOperation(method = "limitDisplayFPS", at = @At(value = "FIELD", target = "Lcom/mojang/blaze3d/systems/RenderSystem;lastDrawTime:D", opcode = Opcodes.PUTSTATIC))
+    private static void nyalkan$steadyCap(double now, Operation<Void> original, @Local(ordinal = 0) double target) {
+        double interval = target - lastDrawTime;
+        original.call(now - target < interval ? target : now);
     }
 }

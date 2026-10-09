@@ -56,6 +56,7 @@ public class MinecraftMixin {
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V", shift = At.Shift.BEFORE))
     private void submitRender(boolean tick, CallbackInfo ci) {
         Renderer.getInstance().endFrame();
+        if (net.nyalkan.vulkan.util.DrawDebug.ENABLED) net.nyalkan.vulkan.util.DrawDebug.frameEnd();
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;bindWrite(Z)V"))

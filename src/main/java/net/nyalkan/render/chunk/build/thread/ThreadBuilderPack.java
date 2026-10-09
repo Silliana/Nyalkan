@@ -34,6 +34,10 @@ public class ThreadBuilderPack {
         return this.builders.get(renderType);
     }
 
+    public void abortAll() {
+        this.builders.values().forEach(TerrainBufferBuilder::reset);
+    }
+
     public void clearAll() {
         this.builders.values().forEach(TerrainBufferBuilder::clear);
     }

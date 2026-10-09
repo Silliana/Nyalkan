@@ -194,6 +194,8 @@ public class RenderRegion implements BlockAndTintGetter {
     }
 
     public int getBlockTint(BlockPos blockPos, ColorResolver colorResolver) {
+        if (!TintCache.isCached(colorResolver))
+            return this.level.getBlockTint(blockPos, colorResolver);
         return tintCache.getColor(blockPos, colorResolver);
     }
 

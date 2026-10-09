@@ -127,6 +127,18 @@ public class SPIRVUtils {
     }
 
     private static String resolveInclude(String requested) {
+        String source = findInclude(requested);
+        if (source == null)
+            throw new RuntimeException("Unable to find " + requested + " in include paths");
+
+        return source;
+    }
+
+    public static boolean hasInclude(String requested) {
+        return findInclude(requested) != null;
+    }
+
+    private static String findInclude(String requested) {
         for (String includePath : includePaths) {
             try {
                 Path path = Paths.get(new URI(includePath + requested));
@@ -139,7 +151,7 @@ public class SPIRVUtils {
             }
         }
 
-        throw new RuntimeException("Unable to find " + requested + " in include paths");
+        return null;
     }
 
     public static SPIRV compileShader(String filename, String source, ShaderKind shaderKind) {
@@ -147,6 +159,8 @@ public class SPIRVUtils {
 
         // mod shaders skip expansion
         source = preprocessIncludes(source, new java.util.HashSet<>());
+        if (shaderKind == ShaderKind.FRAGMENT_SHADER)
+            source = withOpaqueAlphaSwitch(source);
 
         long result = shaderc_compile_into_spv(compiler, source, shaderKind.kind, filename, "main", options);
 
@@ -161,6 +175,22 @@ public class SPIRVUtils {
         time += (System.nanoTime() - startTime) / 1000000.0f;
 
         return new SPIRV(result, shaderc_result_get_bytes(result));
+    }
+
+    public static final int OPAQUE_ALPHA_CONSTANT = 200;
+    private static final java.util.regex.Pattern MAIN = java.util.regex.Pattern.compile("\\bvoid\\s+main\\s*\\(\\s*(void)?\\s*\\)");
+    private static final java.util.regex.Pattern OUTPUT = java.util.regex.Pattern.compile(
+            "(?:layout\\s*\\(\\s*location\\s*=\\s*0\\s*\\)\\s*)?out\\s+vec4\\s+(\\w+)\\s*;");
+
+    private static String withOpaqueAlphaSwitch(String source) {
+        java.util.regex.Matcher main = MAIN.matcher(source);
+        java.util.regex.Matcher output = OUTPUT.matcher(source);
+        if (!main.find() || !output.find() || main.find())
+            return source;
+        String name = output.group(1);
+        return MAIN.matcher(source).replaceFirst("void nyalkan_main()")
+                + "\nlayout(constant_id = " + OPAQUE_ALPHA_CONSTANT + ") const bool NYALKAN_OPAQUE_ALPHA = false;\n"
+                + "void main() {\n    nyalkan_main();\n    if (NYALKAN_OPAQUE_ALPHA)\n        " + name + ".a = 1.0;\n}\n";
     }
 
     private static SPIRV readFromStream(InputStream inputStream) {

@@ -7,7 +7,8 @@ public class ChunkStatusMap {
     public static final byte DATA_READY = 0b1;
     public static final byte LIGHT_READY = 0b10;
     public static final byte NEIGHBOURS_READY = 0b100;
-    public static final byte CHUNK_READY = DATA_READY | LIGHT_READY;
+    // light rebuilds sections anyway
+    public static final byte CHUNK_READY = DATA_READY;
     public static final byte ALL_FLAGS = CHUNK_READY | NEIGHBOURS_READY;
 
     public static ChunkStatusMap INSTANCE;
@@ -54,7 +55,8 @@ public class ChunkStatusMap {
         for (int x1 = x - 1; x1 <= x + 1; ++x1) {
             for (int z1 = z - 1; z1 <= z + 1; ++z1) {
                 if (checkNeighbours(x1, z1)) {
-                    map.put(ChunkPos.asLong(x1, z1), ALL_FLAGS);
+                    long l = ChunkPos.asLong(x1, z1);
+                    map.put(l, (byte) (map.get(l) | NEIGHBOURS_READY));
                 }
                 else {
                     long l = ChunkPos.asLong(x1, z1);
@@ -75,7 +77,7 @@ public class ChunkStatusMap {
         byte flags = CHUNK_READY;
         for (int x1 = x - 1; x1 <= x + 1; ++x1) {
             for (int z1 = z - 1; z1 <= z + 1; ++z1) {
-                flags &= map.get(ChunkPos.asLong(x1, z1));
+                flags &= map.get(ChunkPos.asLong(x1, z1)) & CHUNK_READY;
 
                 if (flags != CHUNK_READY)
                     return false;
@@ -88,7 +90,11 @@ public class ChunkStatusMap {
 
     public boolean chunkRenderReady(int x, int z) {
         byte status = map.get(ChunkPos.asLong(x, z));
-        return status == ALL_FLAGS;
+        return (status & ALL_FLAGS) == ALL_FLAGS;
+    }
+
+    public byte status(int x, int z) {
+        return map.get(ChunkPos.asLong(x, z));
     }
 
     public void reset() {

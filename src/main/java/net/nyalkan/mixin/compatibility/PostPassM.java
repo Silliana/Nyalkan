@@ -21,7 +21,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.IntSupplier;
 
-@Mixin(PostPass.class)
+// lower so others inject
+@Mixin(value = PostPass.class, priority = 500)
 public class PostPassM {
 
     @Shadow @Final public RenderTarget inTarget;

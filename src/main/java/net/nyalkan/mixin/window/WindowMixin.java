@@ -7,9 +7,12 @@ import net.nyalkan.config.Config;
 import net.nyalkan.config.video.VideoModeManager;
 import net.nyalkan.config.option.Options;
 import net.nyalkan.config.video.VideoModeSet;
+import net.nyalkan.vulkan.EarlyWindowSwap;
 import net.nyalkan.vulkan.Renderer;
 import net.nyalkan.vulkan.VRenderSystem;
 import net.nyalkan.vulkan.Vulkan;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GLCapabilities;
 import org.slf4j.Logger;
@@ -22,6 +25,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.Objects;
+
+import java.util.function.IntSupplier;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 import static org.lwjgl.glfw.GLFW.*;
 
@@ -52,7 +61,10 @@ public abstract class WindowMixin {
     @Unique private static final int MAX_TEXTURE_SIZE = 16384;
     @Unique private boolean nyalkan$wasOnFullscreen;
 
-    // no gl context exists
+    @WrapOperation(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/neoforged/fml/loading/ImmediateWindowHandler;setupMinecraftWindow(Ljava/util/function/IntSupplier;Ljava/util/function/IntSupplier;Ljava/util/function/Supplier;Ljava/util/function/LongSupplier;)J", remap = false))
+    private long nyalkan$vulkanWindow(IntSupplier width, IntSupplier height, Supplier<String> title, LongSupplier monitor, Operation<Long> original) {
+        return EarlyWindowSwap.replace(original.call(width, height, title, monitor), width.getAsInt(), height.getAsInt(), title);
+    }
 
     @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lorg/lwjgl/glfw/GLFW;glfwMakeContextCurrent(J)V"))
     private void redirectMakeContextCurrent(long window) { }
@@ -167,6 +179,16 @@ public abstract class WindowMixin {
 
         if(width > 0 && height > 0)
             Renderer.scheduleSwapChainUpdate();
+    }
+
+    @Unique private String nyalkan$title;
+
+    @Inject(method = "setTitle", at = @At("HEAD"), cancellable = true)
+    private void nyalkan$skipSameTitle(String title, CallbackInfo ci) {
+        if (Objects.equals(title, this.nyalkan$title))
+            ci.cancel();
+        else
+            this.nyalkan$title = title;
     }
 
 }

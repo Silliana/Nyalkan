@@ -25,8 +25,6 @@ import java.util.*;
 import static java.util.stream.Collectors.toSet;
 import static net.nyalkan.vulkan.queue.Queue.getQueueFamilies;
 import static net.nyalkan.vulkan.util.VUtil.asPointerBuffer;
-import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
-import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackGet;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
@@ -40,8 +38,10 @@ import static org.lwjgl.vulkan.VK12.VK_API_VERSION_1_2;
 
 public class Vulkan {
 
-    public static final boolean ENABLE_VALIDATION_LAYERS = false;
-//    public static final boolean ENABLE_VALIDATION_LAYERS = true;
+    // validation layer toggle
+    public static final boolean ENABLE_VALIDATION_LAYERS = Boolean.getBoolean("nyalkan.validation");
+    public static final boolean DEBUG_LABELS = Boolean.getBoolean("nyalkan.debugLabels");
+    public static final boolean DEBUG_UTILS = ENABLE_VALIDATION_LAYERS || DEBUG_LABELS;
 
     //    public static final boolean DYNAMIC_RENDERING = true;
     public static final boolean DYNAMIC_RENDERING = false;
@@ -73,24 +73,11 @@ public class Vulkan {
     }
 
     private static int debugCallback(int messageSeverity, int messageType, long pCallbackData, long pUserData) {
-
         VkDebugUtilsMessengerCallbackDataEXT callbackData = VkDebugUtilsMessengerCallbackDataEXT.create(pCallbackData);
-
-        String s;
-        if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0) {
-            s = "\u001B[31m" + callbackData.pMessageString();
-
-//            System.err.println("Stack dump:");
-//            Thread.dumpStack();
-        } else {
-            s = callbackData.pMessageString();
-        }
-
-        System.err.println(s);
-
         if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0)
-            System.nanoTime();
-
+            net.nyalkan.Initializer.LOGGER.error("[Vulkan validation] {}", callbackData.pMessageString());
+        else
+            net.nyalkan.Initializer.LOGGER.warn("[Vulkan validation] {}", callbackData.pMessageString());
         return VK_FALSE;
     }
 
@@ -330,7 +317,7 @@ public class Vulkan {
 
             LongBuffer pSurface = stack.longs(VK_NULL_HANDLE);
 
-            checkResult(glfwCreateWindowSurface(instance, window, null, pSurface),
+            checkResult(GlfwVulkan.createWindowSurface(instance, window, pSurface),
                     "Failed to create window surface");
 
             surface = pSurface.get(0);
@@ -411,6 +398,7 @@ public class Vulkan {
 
             vkBeginCommandBuffer(immediateCmdBuffer, beginInfo);
         }
+        net.nyalkan.vulkan.shader.Pipeline.invalidateBoundSets();
         return immediateCmdBuffer;
     }
 
@@ -457,9 +445,9 @@ public class Vulkan {
 
     private static PointerBuffer getRequiredInstanceExtensions() {
 
-        PointerBuffer glfwExtensions = glfwGetRequiredInstanceExtensions();
+        PointerBuffer glfwExtensions = GlfwVulkan.getRequiredInstanceExtensions();
 
-        int extraCount = (ENABLE_VALIDATION_LAYERS ? 1 : 0) + (surfaceCapabilities2Supported ? 1 : 0);
+        int extraCount = (DEBUG_UTILS ? 1 : 0) + (surfaceCapabilities2Supported ? 1 : 0);
         if (extraCount > 0) {
 
             MemoryStack stack = stackGet();
@@ -467,7 +455,7 @@ public class Vulkan {
             PointerBuffer extensions = stack.mallocPointer(glfwExtensions.capacity() + extraCount);
 
             extensions.put(glfwExtensions);
-            if (ENABLE_VALIDATION_LAYERS) {
+            if (DEBUG_UTILS) {
                 extensions.put(stack.UTF8(VK_EXT_DEBUG_UTILS_EXTENSION_NAME));
             }
             if (surfaceCapabilities2Supported) {

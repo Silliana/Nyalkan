@@ -28,6 +28,10 @@ public abstract class ChunkTask {
 
     public abstract Result runTask(BuilderResources builderResources);
 
+    public void retry() {
+        this.section.setDirty(false);
+    }
+
     public void cancel() {
         this.cancelled.set(true);
     }

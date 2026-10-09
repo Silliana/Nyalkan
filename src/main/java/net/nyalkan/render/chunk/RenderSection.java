@@ -288,6 +288,10 @@ public class RenderSection {
         this.playerChanged = false;
     }
 
+    public boolean hasBuildTask() {
+        return this.compileStatus.buildTask != null;
+    }
+
     public boolean isDirty() {
         return this.dirty;
     }

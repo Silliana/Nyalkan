@@ -89,7 +89,7 @@ public abstract class MipmapGeneratorM {
                             int p2 = MemoryUtil.memGetInt(srcPtr + (sx0 + (long) sy1 * srcWidth) * 4L);
                             int p3 = MemoryUtil.memGetInt(srcPtr + (sx1 + (long) sy1 * srcWidth) * 4L);
 
-                            int outColor = blend(p0, p1, p2, p3);
+                            int outColor = blend(p0, p1, p2, p3, bl);
                             MemoryUtil.memPutInt(dstPtr + (m + (long) n * width) * 4L, outColor);
                         }
                     }
@@ -114,8 +114,11 @@ public abstract class MipmapGeneratorM {
         return false;
     }
 
-    private static int blend(int p0, int p1, int p2, int p3) {
+    private static int blend(int p0, int p1, int p2, int p3, boolean transparent) {
         int a = gammaBlend(p0, p1, p2, p3, 24);
+        // vanilla clear cutoff
+        if (transparent && a < 96)
+            a = 0;
 //        int a = ((p0 >> 24 & 0xFF) + (p1 >> 24 & 0xFF) + (p2 >> 24 & 0xFF) + (p3 >> 24 & 0xFF)) >> 2;
         int b = gammaBlend(p0, p1, p2, p3, 16);
         int g = gammaBlend(p0, p1, p2, p3, 8);

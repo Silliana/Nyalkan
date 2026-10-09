@@ -24,6 +24,24 @@ public class Config {
 
     public boolean uniqueOpaqueLayer = true;
     public boolean entityCulling = true;
+    public boolean immediateBatching = true;
+    public boolean animateOnlyVisible = true;
+    public boolean poseReuse = true;
+    public boolean modelReplay = true;
+    public boolean blockEntityReplay = true;
+    public boolean entityReplay = true;
+    public boolean occlusionCulling = true;
+    public boolean tickSpreading = true;
+    public boolean animationLod = true;
+    public boolean hudBatching = true;
+    public boolean hudCaching = true;
+    public boolean smoothHudUpdates = true;
+    public int hudLowFpsRate = 80;
+    public boolean fpsOverlay = false;
+    public boolean entityBackfaceCulling = true;
+    public boolean gpuParticles = true;
+    public boolean bakedBlockEntities = true;
+    public boolean mipmapSpriteFix = true;
     public int device = -1;
 
     public int ambientOcclusion = 1;

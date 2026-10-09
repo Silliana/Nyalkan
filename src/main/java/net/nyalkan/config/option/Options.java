@@ -1,6 +1,7 @@
 package net.nyalkan.config.option;
 
 import com.mojang.blaze3d.platform.Window;
+import net.minecraft.client.OptionInstance;
 import net.minecraft.client.*;
 import net.minecraft.network.chat.Component;
 import net.nyalkan.Initializer;
@@ -144,15 +145,20 @@ public abstract class Options {
         };
     }
 
+    // mods may widen these
+    private static int maxOf(OptionInstance<Integer> option, int fallback) {
+        return option.values() instanceof OptionInstance.IntRange range ? range.maxInclusive() : fallback;
+    }
+
     public static OptionBlock[] getGraphicsOpts() {
         return new OptionBlock[]{
                 new OptionBlock("", new Option<?>[]{
                         new RangeOption(Component.translatable("options.renderDistance"),
-                                2, 32, 1,
+                                2, maxOf(minecraftOptions.renderDistance(), 32), 1,
                                 (value) -> minecraftOptions.renderDistance().set(value),
                                 () -> minecraftOptions.renderDistance().get()),
                         new RangeOption(Component.translatable("options.simulationDistance"),
-                                5, 32, 1,
+                                5, maxOf(minecraftOptions.simulationDistance(), 32), 1,
                                 (value) -> minecraftOptions.simulationDistance().set(value),
                                 () -> minecraftOptions.simulationDistance().get()),
                         new CyclingOption<>(Component.translatable("options.prioritizeChunkUpdates"),
@@ -249,6 +255,75 @@ public abstract class Options {
                                 value -> config.entityCulling = value,
                                 () -> config.entityCulling)
                                 .setTooltip(Component.translatable("nyalkan.options.entityCulling.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.animateOnlyVisible"),
+                                value -> config.animateOnlyVisible = value,
+                                () -> config.animateOnlyVisible)
+                                .setTooltip(Component.translatable("nyalkan.options.animateOnlyVisible.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.poseReuse"),
+                                value -> config.poseReuse = value,
+                                () -> config.poseReuse)
+                                .setTooltip(Component.translatable("nyalkan.options.poseReuse.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.modelReplay"),
+                                value -> config.modelReplay = value,
+                                () -> config.modelReplay)
+                                .setTooltip(Component.translatable("nyalkan.options.modelReplay.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.blockEntityReplay"),
+                                value -> config.blockEntityReplay = value,
+                                () -> config.blockEntityReplay)
+                                .setTooltip(Component.translatable("nyalkan.options.blockEntityReplay.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.entityReplay"),
+                                value -> config.entityReplay = value,
+                                () -> config.entityReplay)
+                                .setTooltip(Component.translatable("nyalkan.options.entityReplay.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.occlusionCulling"),
+                                value -> config.occlusionCulling = value,
+                                () -> config.occlusionCulling)
+                                .setTooltip(Component.translatable("nyalkan.options.occlusionCulling.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.tickSpreading"),
+                                value -> config.tickSpreading = value,
+                                () -> config.tickSpreading)
+                                .setTooltip(Component.translatable("nyalkan.options.tickSpreading.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.entityBackfaceCulling"),
+                                value -> config.entityBackfaceCulling = value,
+                                () -> config.entityBackfaceCulling)
+                                .setTooltip(Component.translatable("nyalkan.options.entityBackfaceCulling.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.animationLod"),
+                                value -> config.animationLod = value,
+                                () -> config.animationLod)
+                                .setTooltip(Component.translatable("nyalkan.options.animationLod.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.hudBatching"),
+                                value -> config.hudBatching = value,
+                                () -> config.hudBatching)
+                                .setTooltip(Component.translatable("nyalkan.options.hudBatching.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.hudCaching"),
+                                value -> config.hudCaching = value,
+                                () -> config.hudCaching)
+                                .setTooltip(Component.translatable("nyalkan.options.hudCaching.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.smoothHudUpdates"),
+                                value -> config.smoothHudUpdates = value,
+                                () -> config.smoothHudUpdates)
+                                .setTooltip(Component.translatable("nyalkan.options.smoothHudUpdates.tooltip")),
+                        new RangeOption(Component.translatable("nyalkan.options.hudLowFpsRate"),
+                                0, 120, 10,
+                                value -> value == 0 ? Component.translatable("options.off") : Component.literal(value + " Hz"),
+                                value -> config.hudLowFpsRate = value,
+                                () -> config.hudLowFpsRate)
+                                .setTooltip(Component.translatable("nyalkan.options.hudLowFpsRate.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.gpuParticles"),
+                                value -> config.gpuParticles = value,
+                                () -> config.gpuParticles)
+                                .setTooltip(Component.translatable("nyalkan.options.gpuParticles.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.mipmapSpriteFix"),
+                                value -> config.mipmapSpriteFix = value,
+                                () -> config.mipmapSpriteFix)
+                                .setTooltip(Component.translatable("nyalkan.options.mipmapSpriteFix.tooltip")),
+                        new SwitchOption(Component.translatable("nyalkan.options.bakedBlockEntities"),
+                                value -> {
+                                    config.bakedBlockEntities = value;
+                                    minecraft.levelRenderer.allChanged();
+                                },
+                                () -> config.bakedBlockEntities)
+                                .setTooltip(Component.translatable("nyalkan.options.bakedBlockEntities.tooltip")),
                         new SwitchOption(Component.translatable("nyalkan.options.uniqueOpaqueLayer"),
                                 value -> {
                                     config.uniqueOpaqueLayer = value;
@@ -287,7 +362,11 @@ public abstract class Options {
                                         Component.translatable("nyalkan.options.deviceSelector.tooltip").getString(),
                                         DeviceManager.device.deviceName
                                 ))
-                        )
+                        ),
+                        new SwitchOption(Component.translatable("nyalkan.options.fpsOverlay"),
+                                value -> config.fpsOverlay = value,
+                                () -> config.fpsOverlay)
+                                .setTooltip(Component.translatable("nyalkan.options.fpsOverlay.tooltip"))
                 })
         };
 

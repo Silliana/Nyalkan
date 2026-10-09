@@ -94,6 +94,10 @@ public class DrawBuffers {
     }
 
     // TODO: refactor
+    // u16 quad index limit
+    private static final int MAX_QUAD_VERTICES = 65536;
+    private static final int MAX_QUAD_INDICES = MAX_QUAD_VERTICES / 4 * 6;
+
     public static final float POS_OFFSET = PipelineManager.TERRAIN_VERTEX_FORMAT == CustomVertexFormat.COMPRESSED_TERRAIN ? 4.0f : 0.0f;
 
     private void updateChunkAreaOrigin(VkCommandBuffer commandBuffer, Pipeline pipeline, double camX, double camY, double camZ, MemoryStack stack) {
@@ -114,10 +118,18 @@ public class DrawBuffers {
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
-            ByteBuffer byteBuffer = stack.malloc(20 * queue.size());
-            long bufferPtr = MemoryUtil.memAddress0(byteBuffer);
-
             boolean isTranslucent = terrainRenderType == TerrainRenderType.TRANSLUCENT;
+
+            int commands = 0;
+            for (var iterator = queue.iterator(isTranslucent); iterator.hasNext(); ) {
+                final DrawParameters drawParameters = iterator.next().getDrawParameters(terrainRenderType);
+                if (drawParameters.indexCount > 0)
+                    commands += isTranslucent ? 1 : (drawParameters.indexCount + MAX_QUAD_INDICES - 1) / MAX_QUAD_INDICES;
+            }
+            if (commands == 0) return;
+
+            ByteBuffer byteBuffer = stack.malloc(20 * commands);
+            long bufferPtr = MemoryUtil.memAddress0(byteBuffer);
 
             int drawCount = 0;
             for (var iterator = queue.iterator(isTranslucent); iterator.hasNext(); ) {
@@ -128,14 +140,23 @@ public class DrawBuffers {
                 if (drawParameters.indexCount <= 0)
                     continue;
 
-                long ptr = bufferPtr + (drawCount * 20L);
-                MemoryUtil.memPutInt(ptr, drawParameters.indexCount);
-                MemoryUtil.memPutInt(ptr + 4, 1);
-                MemoryUtil.memPutInt(ptr + 8, drawParameters.firstIndex == -1 ? 0 : drawParameters.firstIndex);
-                MemoryUtil.memPutInt(ptr + 12, drawParameters.vertexOffset);
-                MemoryUtil.memPutInt(ptr + 16, drawParameters.baseInstance);
+                int remaining = drawParameters.indexCount;
+                int vertexOffset = drawParameters.vertexOffset;
+                int firstIndex = drawParameters.firstIndex == -1 ? 0 : drawParameters.firstIndex;
+                do {
+                    int count = isTranslucent ? remaining : Math.min(remaining, MAX_QUAD_INDICES);
 
-                drawCount++;
+                    long ptr = bufferPtr + (drawCount * 20L);
+                    MemoryUtil.memPutInt(ptr, count);
+                    MemoryUtil.memPutInt(ptr + 4, 1);
+                    MemoryUtil.memPutInt(ptr + 8, firstIndex);
+                    MemoryUtil.memPutInt(ptr + 12, vertexOffset);
+                    MemoryUtil.memPutInt(ptr + 16, drawParameters.baseInstance);
+                    drawCount++;
+
+                    remaining -= count;
+                    vertexOffset += MAX_QUAD_VERTICES;
+                } while (remaining > 0);
             }
 
             if (drawCount == 0) return;
@@ -161,12 +182,25 @@ public class DrawBuffers {
                 continue;
 
             final int firstIndex = drawParameters.firstIndex == -1 ? 0 : drawParameters.firstIndex;
-            vkCmdDrawIndexed(commandBuffer, drawParameters.indexCount, 1, firstIndex, drawParameters.vertexOffset, drawParameters.baseInstance);
+            if (isTranslucent) {
+                vkCmdDrawIndexed(commandBuffer, drawParameters.indexCount, 1, firstIndex, drawParameters.vertexOffset, drawParameters.baseInstance);
+                continue;
+            }
+
+            int remaining = drawParameters.indexCount;
+            int vertexOffset = drawParameters.vertexOffset;
+            while (remaining > 0) {
+                int count = Math.min(remaining, MAX_QUAD_INDICES);
+                vkCmdDrawIndexed(commandBuffer, count, 1, firstIndex, vertexOffset, drawParameters.baseInstance);
+                remaining -= count;
+                vertexOffset += MAX_QUAD_VERTICES;
+            }
         }
     }
 
     public void bindBuffers(VkCommandBuffer commandBuffer, Pipeline pipeline, TerrainRenderType terrainRenderType, double camX, double camY, double camZ) {
 
+        Renderer.getDrawer().invalidateBindings();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             var vertexBuffer = getAreaBuffer(terrainRenderType);
             nvkCmdBindVertexBuffers(commandBuffer, 0, 1, stack.npointer(vertexBuffer.getId()), stack.npointer(0));

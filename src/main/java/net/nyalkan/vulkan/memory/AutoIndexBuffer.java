@@ -151,8 +151,10 @@ public class AutoIndexBuffer {
 
         int j = 0;
         for (int i = 0; i < vertexCount - 2; ++i) {
-            idxs.put(j + 0, (short) i);
-            idxs.put(j + 1, (short) (i + 1));
+            // odd triangles flip winding
+            boolean odd = (i & 1) != 0;
+            idxs.put(j + 0, (short) (odd ? i + 1 : i));
+            idxs.put(j + 1, (short) (odd ? i : i + 1));
             idxs.put(j + 2, (short) (i + 2));
 
             j += 3;

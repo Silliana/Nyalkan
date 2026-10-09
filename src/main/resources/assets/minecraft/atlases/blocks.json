@@ -1,0 +1,46 @@
+{
+  "sources": [
+    {
+      "type": "directory",
+      "source": "entity/chest",
+      "prefix": "entity/chest/"
+    },
+    {
+      "type": "directory",
+      "source": "entity/bed",
+      "prefix": "entity/bed/"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:chest"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:chest_opened"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:chest_trapped"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:chest_trapped_opened"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:old_chest"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:old_chest_opened"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:old_chest_trapped"
+    },
+    {
+      "type": "single",
+      "resource": "lootr:old_chest_trapped_opened"
+    }
+  ]
+}

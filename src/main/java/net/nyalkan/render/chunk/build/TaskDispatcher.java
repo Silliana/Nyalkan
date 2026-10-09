@@ -70,25 +70,38 @@ public class TaskDispatcher {
         }
     }
 
+    private static final java.util.Set<String> FAILURES_LOGGED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private void runTaskThread(BuilderResources builderResources) {
         while(!this.stopThreads) {
             ChunkTask task = this.pollTask();
 
             if(task == null)
                 synchronized (this) {
-                    try {
-                        this.idleThreads++;
-                        this.wait();
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
+                    // recheck under lock
+                    if (this.highPriorityTasks.isEmpty() && this.lowPriorityTasks.isEmpty() && !this.stopThreads) {
+                        try {
+                            this.idleThreads++;
+                            this.wait();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        } finally {
+                            this.idleThreads--;
+                        }
                     }
-                    this.idleThreads--;
                 }
 
             if(task == null)
                 continue;
 
-            task.runTask(builderResources);
+            try {
+                task.runTask(builderResources);
+            } catch (Throwable t) {
+                builderResources.builderPack.abortAll();
+                if (FAILURES_LOGGED.add(t.toString()))
+                    Initializer.LOGGER.error("Chunk build task failed, will retry the section", t);
+                task.retry();
+            }
         }
     }
 
@@ -166,14 +179,12 @@ public class TaskDispatcher {
         ChunkAreaManager chunkAreaManager = WorldRenderer.getInstance().getChunkAreaManager();
         if (chunkAreaManager.getChunkArea(renderArea.index) != renderArea) {
             compileResult.renderedLayers.values().forEach(UploadBuffer::release);
+            section.setDirty(false);
             return;
         }
 
         // newer rebuild wins
         if (compileResult.generation != -1 && compileResult.generation != section.getCompileGeneration()) {
-            Initializer.LOGGER.info("[STALE_COMPILE] discarded section({},{},{}) resultGen={} currentGen={}",
-                    section.xOffset(), section.yOffset(), section.zOffset(),
-                    compileResult.generation, section.getCompileGeneration());
             compileResult.renderedLayers.values().forEach(UploadBuffer::release);
             return;
         }
