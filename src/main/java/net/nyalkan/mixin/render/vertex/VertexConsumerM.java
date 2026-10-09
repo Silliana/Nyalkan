@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.core.Vec3i;
 import net.nyalkan.render.vertex.VertexUtil;
+import net.nyalkan.render.vertex.BakedQuadData;
 import net.nyalkan.vulkan.util.ColorUtil;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -54,7 +55,8 @@ public interface VertexConsumerM {
 
             int color = ColorUtil.RGBA.pack(r, g, b, alpha);
 
-            int light = lights[k];
+            int light = BakedQuadData.light(lights[k], js[i + 6]);
+            BakedQuadData.normal(normal, js[i + 7], matrixEntry.normal());
             float u = Float.intBitsToFloat(js[i + 4]);
             float v = Float.intBitsToFloat(js[i + 5]);
 
