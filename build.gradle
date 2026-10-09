@@ -16,23 +16,6 @@ java {
     }
 }
 
-sourceSets {
-    earlyWindow
-}
-
-configurations.named('earlyWindowCompileClasspath') {
-    extendsFrom(configurations.compileClasspath)
-}
-
-tasks.register('earlyWindowJar', Jar) {
-    archiveClassifier = 'earlywindow'
-    from sourceSets.earlyWindow.output
-}
-
-tasks.matching { it.name == 'runClient' }.configureEach {
-    dependsOn tasks.named('earlyWindowJar')
-}
-
 neoForge {
     version = project.neoforge_version
 
@@ -50,9 +33,6 @@ neoForge {
             client()
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'neoforge.earlywindow', 'false'
-            additionalRuntimeClasspathConfiguration.dependencies.add(
-                project.dependencies.create(project.files(project.tasks.named('earlyWindowJar')))
-            )
             additionalRuntimeClasspathConfiguration.extendsFrom(configurations.runtimeClasspath)
         }
 
@@ -88,6 +68,16 @@ repositories {
         name = 'NeoForged'
         url = 'https://maven.neoforged.net/releases'
     }
+    maven {
+        name = 'GeckoLib'
+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content { includeGroup 'software.bernie.geckolib' }
+    }
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com/'
+        content { includeGroup 'foundry.veil' }
+    }
 }
 
 project.ext.lwjglVersion = "3.3.3"
@@ -101,13 +91,17 @@ configurations {
 }
 
 dependencies {
-    implementation("org.lwjgl:lwjgl-vulkan:$lwjglVersion")
+    jarJar("org.lwjgl:lwjgl-vulkan:[$lwjglVersion,)") { version { strictly lwjglVersion } }
+    compileOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion")
+    runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion")
     jarJar("org.lwjgl:lwjgl-vma:[$lwjglVersion,)") { version { strictly lwjglVersion } }
     jarJar("org.lwjgl:lwjgl-shaderc:[$lwjglVersion,)") { version { strictly lwjglVersion } }
     compileOnly("org.lwjgl:lwjgl-vma:$lwjglVersion")
     compileOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion")
     runtimeOnly("org.lwjgl:lwjgl-vma:$lwjglVersion")
     runtimeOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion")
+    compileOnly('foundry.veil:veil-neoforge-1.21.1:4.3.2') { transitive = false }
+    compileOnly('software.bernie.geckolib:geckolib-neoforge-1.21.1:4.9.2') { transitive = false }
     shadedNatives("org.lwjgl:lwjgl-vma:$lwjglVersion:$winNatives")
     shadedNatives("org.lwjgl:lwjgl-vma:$lwjglVersion:$linuxNatives")
     shadedNatives("org.lwjgl:lwjgl-vma:$lwjglVersion:$macosNatives")
@@ -120,6 +114,9 @@ dependencies {
 
 tasks.named('jar', Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes('Implementation-Version': project.version)
+    }
     from {
         configurations.shadedNatives.collect { zipTree(it) }
     } {
