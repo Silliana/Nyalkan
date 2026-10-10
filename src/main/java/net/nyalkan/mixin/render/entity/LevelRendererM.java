@@ -16,7 +16,11 @@ import net.minecraft.world.TickRateManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.nyalkan.Initializer;
+import net.nyalkan.interfaces.ExtendedEntity;
 import net.nyalkan.render.chunk.WorldRenderer;
+import net.nyalkan.render.model.EntityReplay;
+import net.nyalkan.render.occlusion.HiZ;
+import net.nyalkan.tick.TickSpreader;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
@@ -53,6 +57,7 @@ public class LevelRendererM {
         // camera renders immediately
         boolean isCamera = entity == Minecraft.getInstance().getCameraEntity();
         if (!Initializer.CONFIG.entityCulling || !this.managed || isCamera) {
+            ((ExtendedEntity) entity).nyalkan$setDrawnTick(TickSpreader.tickIndex());
             double h = Mth.lerp(partialTicks, entity.xOld, entity.getX());
             double i = Mth.lerp(partialTicks, entity.yOld, entity.getY());
             double j = Mth.lerp(partialTicks, entity.zOld, entity.getZ());
@@ -82,19 +87,24 @@ public class LevelRendererM {
         TickRateManager tickRateManager = this.minecraft.level.tickRateManager();
 
         PoseStack poseStack = new PoseStack();
+        MultiBufferSource mainSource = this.minecraft.renderBuffers().bufferSource();
 
         for (var bufferSource : this.bufferSourceMap.keySet()) {
             var entityMap = this.bufferSourceMap.get(bufferSource);
 
             for (var list : entityMap.values()) {
                 for (Entity entity : list) {
+                    // outlines see through walls
+                    if (bufferSource == mainSource && HiZ.enabled() && HiZ.occluded(entity.getBoundingBoxForCulling().inflate(0.5)))
+                        continue;
+                    ((ExtendedEntity) entity).nyalkan$setDrawnTick(TickSpreader.tickIndex());
                     float partialTicks = deltaTracker.getGameTimeDeltaPartialTick(!tickRateManager.isEntityFrozen(entity));
 
                     double h = Mth.lerp(partialTicks, entity.xOld, entity.getX());
                     double i = Mth.lerp(partialTicks, entity.yOld, entity.getY());
                     double j = Mth.lerp(partialTicks, entity.zOld, entity.getZ());
                     float k = Mth.lerp(partialTicks, entity.yRotO, entity.getYRot());
-                    this.entityRenderDispatcher.render(entity, h - cameraPos.x, i - cameraPos.y, j - cameraPos.z, k, partialTicks, poseStack, bufferSource, this.entityRenderDispatcher.getPackedLightCoords(entity, partialTicks));
+                    EntityReplay.render(this.entityRenderDispatcher, entity, h - cameraPos.x, i - cameraPos.y, j - cameraPos.z, k, partialTicks, poseStack, bufferSource, this.entityRenderDispatcher.getPackedLightCoords(entity, partialTicks));
                 }
             }
         }

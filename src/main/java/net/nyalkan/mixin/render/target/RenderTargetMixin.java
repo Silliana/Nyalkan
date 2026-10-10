@@ -113,6 +113,20 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
 
     @Overwrite
     public void destroyBuffers() {
+        RenderSystem.assertOnRenderThreadOrInit();
+        // old images otherwise leak
+        if (this.depthBufferId > -1) {
+            GlTexture.glDeleteTextures(this.depthBufferId);
+            this.depthBufferId = -1;
+        }
+        if (this.colorTextureId > -1) {
+            GlTexture.glDeleteTextures(this.colorTextureId);
+            this.colorTextureId = -1;
+        }
+        if (this.frameBufferId > -1) {
+            GlFramebuffer.releaseFramebuffer(this.frameBufferId);
+            this.frameBufferId = -1;
+        }
     }
 
     @Overwrite
@@ -139,6 +153,9 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
                 GlTexture.allocateTexture2D(this.depthBufferId, width, height, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT);
                 GlFramebuffer.framebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D, this.depthBufferId, 0);
             }
+
+            // vanilla ends unbound
+            GlFramebuffer.bindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
         }
     }
 
@@ -149,7 +166,17 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
             Framebuffer framebuffer = GlFramebuffer.getFramebuffer(this.frameBufferId).getFramebuffer();
             VTextureSelector.bindTexture(0, framebuffer.getColorAttachment());
 
+            // vanilla blit state
+            GlStateManager._colorMask(true, true, true, false);
+            GlStateManager._disableDepthTest();
+            GlStateManager._depthMask(false);
+            if (disableBlend)
+                GlStateManager._disableBlend();
+
             DrawUtil.blitToScreen();
+
+            GlStateManager._depthMask(true);
+            GlStateManager._colorMask(true, true, true, true);
         }
 
         ci.cancel();

@@ -42,7 +42,11 @@ public class GlRenderbuffer {
     }
 
     public static void deleteRenderbuffer(int i) {
-        map.remove(i);
+        GlRenderbuffer renderbuffer = map.remove(i);
+        if (renderbuffer != null && renderbuffer.vulkanImage != null) {
+            renderbuffer.vulkanImage.free();
+            renderbuffer.vulkanImage = null;
+        }
     }
 
     public static GlRenderbuffer getRenderbuffer(int id) {
@@ -162,9 +166,9 @@ public class GlRenderbuffer {
         byte samplerFlags = magFilter == GL11.GL_LINEAR ? SamplerManager.LINEAR_FILTERING_BIT : 0;
 
         samplerFlags |= switch (minFilter) {
-            case GL11.GL_LINEAR_MIPMAP_LINEAR ->
+            case GL11.GL_LINEAR_MIPMAP_LINEAR, GL11.GL_NEAREST_MIPMAP_LINEAR ->
                     SamplerManager.USE_MIPMAPS_BIT | SamplerManager.MIPMAP_LINEAR_FILTERING_BIT;
-            case GL11.GL_NEAREST_MIPMAP_NEAREST -> SamplerManager.USE_MIPMAPS_BIT;
+            case GL11.GL_NEAREST_MIPMAP_NEAREST, GL11.GL_LINEAR_MIPMAP_NEAREST -> SamplerManager.USE_MIPMAPS_BIT;
             default -> 0;
         };
 

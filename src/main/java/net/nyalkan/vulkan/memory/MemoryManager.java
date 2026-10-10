@@ -172,6 +172,8 @@ public class MemoryManager {
             int result = vmaCreateImage(ALLOCATOR, imageInfo, allocationInfo, pTextureImage, pTextureImageMemory, null);
             if (result != VK_SUCCESS) {
                 Initializer.LOGGER.info(String.format("Failed to create image %dx%d, format=%d, usage=%d", width, height, format, usage));
+                Initializer.LOGGER.info(String.format("Tracked Device Memory used: %d/%d MB", getInstance().getAllocatedDeviceMemoryMB(), getInstance().getDeviceMemoryMB()));
+                Initializer.LOGGER.info(getInstance().getHeapStats());
 
                 throw new RuntimeException("Failed to create image: %s".formatted(VkResult.decode(result)));
             }
@@ -225,10 +227,35 @@ public class MemoryManager {
         images.remove(image);
     }
 
+    // gpu idle during resize
+    private static boolean immediateFree;
+
+    public static void setImmediateFree(boolean immediate) {
+        immediateFree = immediate;
+        if (immediate)
+            getInstance().freeAllPending();
+    }
+
+    private synchronized void freeAllPending() {
+        for (int frame = 0; frame < this.freeableBuffers.length; frame++) {
+            for (Buffer.BufferInfo bufferInfo : this.freeableBuffers[frame])
+                freeBuffer(bufferInfo);
+            this.freeableBuffers[frame].clear();
+            for (VulkanImage image : this.freeableImages[frame])
+                image.doFree();
+            this.freeableImages[frame].clear();
+        }
+    }
+
     public synchronized void addToFreeable(Buffer buffer) {
         Buffer.BufferInfo bufferInfo = buffer.getBufferInfo();
 
         checkBuffer(bufferInfo);
+
+        if (immediateFree) {
+            freeBuffer(bufferInfo);
+            return;
+        }
 
         freeableBuffers[currentFrame].add(bufferInfo);
 
@@ -237,6 +264,10 @@ public class MemoryManager {
     }
 
     public synchronized void addToFreeable(VulkanImage image) {
+        if (immediateFree) {
+            image.doFree();
+            return;
+        }
         freeableImages[currentFrame].add(image);
     }
 
@@ -323,6 +354,17 @@ public class MemoryManager {
             long budget = vmaBudget.budget();
 
             return String.format("Device Memory Heap Usage: %d/%dMB", bytesInMb(usage), bytesInMb(budget));
+        }
+    }
+
+    // real process vram
+    public String getVramLine() {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VmaBudget.Buffer vmaBudgets = VmaBudget.calloc(DeviceManager.memoryProperties.memoryHeapCount(), stack);
+            vmaGetHeapBudgets(ALLOCATOR, vmaBudgets);
+            VmaBudget vmaBudget = vmaBudgets.get(MemoryTypes.GPU_MEM.vkMemoryType.heapIndex());
+            return String.format("VRAM: %d/%dMB (allocator %dMB)", bytesInMb(vmaBudget.usage()), bytesInMb(vmaBudget.budget()),
+                    bytesInMb(vmaBudget.statistics().blockBytes()));
         }
     }
 }
