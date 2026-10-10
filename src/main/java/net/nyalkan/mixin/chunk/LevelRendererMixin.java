@@ -14,7 +14,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.BlockDestructionProgress;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.ClientHooks;
 import net.nyalkan.render.chunk.WorldRenderer;
+import net.nyalkan.render.occlusion.HiZ;
+import net.nyalkan.render.model.BlockEntityReplay;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
@@ -33,6 +39,10 @@ public abstract class LevelRendererMixin {
     @Shadow @Final
     private Long2ObjectMap<SortedSet<BlockDestructionProgress>> destructionProgress;
 
+    @Shadow private int ticks;
+    @Shadow @Final private Minecraft minecraft;
+    @Shadow public abstract Frustum getFrustum();
+
     private WorldRenderer worldRenderer;
 
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -48,6 +58,15 @@ public abstract class LevelRendererMixin {
     @Inject(method = "allChanged", at = @At("RETURN"))
     private void onAllChanged(CallbackInfo ci) {
         this.worldRenderer.allChanged();
+    }
+
+    @WrapOperation(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/blockentity/BlockEntityRenderDispatcher;render(Lnet/minecraft/world/level/block/entity/BlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;)V"))
+    private void nyalkan$replayGlobal(BlockEntityRenderDispatcher dispatcher, BlockEntity blockEntity, float partialTick, PoseStack poseStack,
+                                        MultiBufferSource source, Operation<Void> original) {
+        if (blockEntity.getLevel() != this.minecraft.level)
+            original.call(dispatcher, blockEntity, partialTick, poseStack, source);
+        else
+            BlockEntityReplay.render(dispatcher, blockEntity, partialTick, poseStack, source);
     }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;checkPoseStack(Lcom/mojang/blaze3d/vertex/PoseStack;)V", ordinal = 1, shift = At.Shift.BEFORE))
@@ -72,6 +91,12 @@ public abstract class LevelRendererMixin {
     @Inject(method = "renderSectionLayer", at = @At("HEAD"), cancellable = true)
     private void nyalkan$renderSectionLayer(RenderType renderType, double camX, double camY, double camZ, Matrix4f modelView, Matrix4f projectionMatrix, CallbackInfo ci) {
         this.worldRenderer.renderSectionLayer(renderType, camX, camY, camZ, modelView, projectionMatrix);
+        // opaque terrain done
+        if (renderType == RenderType.cutout())
+            HiZ.capture(modelView, projectionMatrix, camX, camY, camZ);
+        // vanilla layer stage events
+        ClientHooks.dispatchRenderStage(renderType, (LevelRenderer) (Object) this, modelView, projectionMatrix,
+                this.ticks, this.minecraft.gameRenderer.getMainCamera(), this.getFrustum());
         ci.cancel();
     }
 
