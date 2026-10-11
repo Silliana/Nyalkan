@@ -6,6 +6,8 @@ import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.DebugScreenOverlay;
 import net.minecraft.client.renderer.entity.ItemRenderer;
+import net.nyalkan.Initializer;
+import net.nyalkan.render.profiling.FpsOverlay;
 import net.nyalkan.render.profiling.ProfilerOverlay;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,7 +28,11 @@ public class GuiMixin {
 
     @Inject(method = "render", at = @At(value = "RETURN"))
     private void renderProfilerOverlay(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        if(ProfilerOverlay.shouldRender && !this.debugOverlay.showDebugScreen())
+        if (this.debugOverlay.showDebugScreen())
+            return;
+        if (ProfilerOverlay.shouldRender)
             ProfilerOverlay.INSTANCE.render(guiGraphics);
+        else if (Initializer.CONFIG.fpsOverlay)
+            FpsOverlay.render(guiGraphics);
     }
 }
