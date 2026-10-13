@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
-import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
@@ -17,6 +16,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
+import net.neoforged.neoforge.client.textures.FluidSpriteCache;
 import net.nyalkan.render.chunk.build.light.LightPipeline;
 import net.nyalkan.render.chunk.build.light.data.QuadLightData;
 import net.nyalkan.render.chunk.build.thread.BuilderResources;
@@ -91,7 +91,10 @@ public class LiquidRenderer {
         final IClientFluidTypeExtensions extensions = IClientFluidTypeExtensions.of(fluidState);
         int color = extensions.getTintColor(fluidState, region, blockPos);
 
-        TextureAtlasSprite[] sprites = getFluidSprites(extensions, fluidState, region, blockPos);
+        TextureAtlasSprite[] sprites = FluidSpriteCache.getFluidSprites(region, blockPos, fluidState);
+        for (TextureAtlasSprite sprite : sprites)
+            if (sprite != null)
+                this.resources.trackSprite(sprite);
 
         float r = ColorUtil.ARGB.unpackR(color);
         float g = ColorUtil.ARGB.unpackG(color);
@@ -321,9 +324,9 @@ public class LiquidRenderer {
             if (isFaceOccludedByState(region, Math.max(h1, h2), direction, blockPos, adjState))
                 continue;
 
-            TextureAtlasSprite sprite = sprites[1];
-            // no overlay sprite
-            boolean isOverlay = false;
+            mBlockPos.set(blockPos).move(direction);
+            boolean isOverlay = sprites[2] != null && adjState.shouldDisplayFluidOverlay(region, mBlockPos, fluidState);
+            TextureAtlasSprite sprite = isOverlay ? sprites[2] : sprites[1];
 
             float u0 = sprite.getU(0.0F);
             float u1 = sprite.getU(0.5F);
@@ -348,15 +351,6 @@ public class LiquidRenderer {
             }
 
         }
-    }
-
-    private static TextureAtlasSprite[] getFluidSprites(IClientFluidTypeExtensions extensions, FluidState fluidState,
-                                                         BlockAndTintGetter region, BlockPos blockPos) {
-        var atlas = Minecraft.getInstance().getTextureAtlas(InventoryMenu.BLOCK_ATLAS);
-        return new TextureAtlasSprite[]{
-                atlas.apply(extensions.getStillTexture(fluidState, region, blockPos)),
-                atlas.apply(extensions.getFlowingTexture(fluidState, region, blockPos))
-        };
     }
 
     private float calculateAverageHeight(BlockAndTintGetter blockAndTintGetter, Fluid fluid, float f, float g, float h, BlockPos blockPos) {
