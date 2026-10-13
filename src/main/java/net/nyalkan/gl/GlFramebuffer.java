@@ -1,5 +1,6 @@
 package net.nyalkan.gl;
 
+import net.nyalkan.render.immediate.ImmediateBatcher;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import net.minecraft.client.Minecraft;
@@ -26,6 +27,19 @@ public class GlFramebuffer {
     private static int readBoundId = 0;
     private static GlFramebuffer readBoundFramebuffer;
 
+    public record Binding(int id, GlFramebuffer framebuffer, int readId, GlFramebuffer readFramebuffer) {}
+
+    public static Binding saveBinding() {
+        return new Binding(boundId, boundFramebuffer, readBoundId, readBoundFramebuffer);
+    }
+
+    public static void restoreBinding(Binding binding) {
+        boundId = binding.id();
+        boundFramebuffer = binding.framebuffer();
+        readBoundId = binding.readId();
+        readBoundFramebuffer = binding.readFramebuffer();
+    }
+
     public static void resetBoundFramebuffer() {
         boundFramebuffer = null;
         boundId = 0;
@@ -41,7 +55,9 @@ public class GlFramebuffer {
         Renderer.setInvertedViewport(0, 0, viewWidth, viewHeight);
         Renderer.setScissor(0, 0, viewWidth, viewHeight);
 
+        // restore after pass reset
         boundId = glFramebuffer.id;
+        boundFramebuffer = glFramebuffer;
     }
 
     public static int genFramebufferId() {
@@ -52,6 +68,9 @@ public class GlFramebuffer {
     }
 
     public static void bindFramebuffer(int target, int id) {
+        ImmediateBatcher.INSTANCE.flushGui();
+        if (isMainTarget(id))
+            id = 0;
 
         if (target == GL30.GL_READ_FRAMEBUFFER) {
             readBoundId = id;
@@ -129,6 +148,16 @@ public class GlFramebuffer {
         DrawUtil.blitToScreen(!isMainTarget(readBoundId));
     }
 
+    public static void releaseFramebuffer(int id) {
+        GlFramebuffer glFramebuffer = map.remove(id);
+        if (glFramebuffer == null)
+            return;
+        if (boundFramebuffer == glFramebuffer)
+            boundFramebuffer = null;
+        if (glFramebuffer.framebuffer != null)
+            glFramebuffer.cleanUp();
+    }
+
     public static void deleteFramebuffer(int id) {
         if (id == 0) {
             return;
@@ -172,6 +201,12 @@ public class GlFramebuffer {
     public static int glCheckFramebufferStatus(int target) {
         //TODO
         return GL30.GL_FRAMEBUFFER_COMPLETE;
+    }
+
+    // main reports own id
+    public static int getBinding(boolean read) {
+        int id = read ? readBoundId : boundId;
+        return id == 0 ? Minecraft.getInstance().getMainRenderTarget().frameBufferId : id;
     }
 
     public static GlFramebuffer getBoundFramebuffer() {
