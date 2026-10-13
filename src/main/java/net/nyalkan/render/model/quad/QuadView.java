@@ -14,6 +14,8 @@ public interface QuadView {
 
     int getColor(int idx);
 
+    int getLight(int idx);
+
     float getU(int idx);
 
     float getV(int idx);

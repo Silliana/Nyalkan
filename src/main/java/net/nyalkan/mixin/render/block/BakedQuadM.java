@@ -22,8 +22,8 @@ public class BakedQuadM implements QuadView {
     @Shadow @Final protected int tintIndex;
     private int flags;
 
-    @Inject(method = "<init>", at = @At("RETURN"))
-    private void onInit(int[] vertices, int tintIndex, Direction direction, TextureAtlasSprite textureAtlasSprite, boolean shade, CallbackInfo ci) {
+    @Inject(method = "<init>([IILnet/minecraft/core/Direction;Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;ZZ)V", at = @At("RETURN"))
+    private void onInit(int[] vertices, int tintIndex, Direction direction, TextureAtlasSprite textureAtlasSprite, boolean shade, boolean hasAmbientOcclusion, CallbackInfo ci) {
         this.flags = ModelQuadFlags.getQuadFlags(vertices, direction);
     }
 
@@ -50,6 +50,11 @@ public class BakedQuadM implements QuadView {
     @Override
     public int getColor(int idx) {
         return this.vertices[vertexOffset(idx) + 3];
+    }
+
+    @Override
+    public int getLight(int idx) {
+        return this.vertices[vertexOffset(idx) + 6];
     }
 
     @Override

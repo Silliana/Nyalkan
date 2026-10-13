@@ -124,6 +124,13 @@ public class BlockRenderer {
         }
     }
 
+    public void renderQuads(TerrainBufferBuilder bufferBuilder, BlockState blockState, BlockPos blockPos, Vector3f pos, List<BakedQuad> quads) {
+        this.blockState = blockState;
+        this.blockPos = blockPos;
+        this.pos = pos;
+        renderModelFace(bufferBuilder, quads, this.lightPipeline(true), null);
+    }
+
     // emissive blocks stay flat
     private LightPipeline lightPipeline(boolean modelAO) {
         boolean smooth = modelAO && Minecraft.useAmbientOcclusion() && blockState.getLightEmission() == 0;
@@ -147,6 +154,7 @@ public class BlockRenderer {
 
         for (int i = 0; i < quads.size(); ++i) {
             BakedQuad bakedQuad = quads.get(i);
+            resources.trackSprite(bakedQuad.getSprite());
             QuadView quadView = (QuadView) bakedQuad;
             LightPipeline quadLightPipeline = bakedQuad.hasAmbientOcclusion() ? lightPipeline : resources.flatLightPipeline;
             quadLightPipeline.calculate(quadView, blockPos, quadLightData, cullFace, bakedQuad.getDirection(), bakedQuad.isShade());
@@ -201,7 +209,7 @@ public class BlockRenderer {
             b = quadB * brightness * blue;
 
             final int color = ColorUtil.RGBA.pack(r, g, b, 1.0f);
-            final int light = lights[idx];
+            final int light = withBakedLight(lights[idx], quad.getLight(idx));
             final float u = quad.getU(idx);
             final float v = quad.getV(idx);
 
@@ -210,6 +218,13 @@ public class BlockRenderer {
             idx = (idx + 1) & 0b11;
         }
 
+    }
+
+    // emissive quads keep light
+    private static int withBakedLight(int light, int baked) {
+        if (baked == 0)
+            return light;
+        return Math.max(light & 0xFFFF, baked & 0xFFFF) | Math.max(light >>> 16, baked >>> 16) << 16;
     }
 
     public boolean shouldRenderFace(BlockState blockState, Direction direction, BlockPos adjPos) {

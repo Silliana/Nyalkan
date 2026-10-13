@@ -39,6 +39,11 @@ public class ModelQuad implements QuadView {
     }
 
     @Override
+    public int getLight(int idx) {
+        return this.data[vertexOffset(idx) + 6];
+    }
+
+    @Override
     public float getU(int idx) {
         return Float.intBitsToFloat(this.data[vertexOffset(idx) + 4]);
     }
