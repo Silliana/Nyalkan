@@ -1,6 +1,5 @@
 package net.nyalkan.mixin.profiling;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.GameRenderer;
@@ -15,18 +14,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LevelRenderer.class)
 public class LevelRendererMixin {
-
-    @Inject(method = "renderClouds", at = @At("HEAD"))
-    private void pushProfiler(PoseStack poseStack, Matrix4f matrix4f, Matrix4f matrix4f2, float f, double d, double e, double g, CallbackInfo ci) {
-        Profiler profiler = Profiler.getMainProfiler();
-        profiler.push("Clouds");
-    }
-
-    @Inject(method = "renderClouds", at = @At("RETURN"))
-    private void popProfiler(PoseStack poseStack, Matrix4f matrix4f, Matrix4f matrix4f2, float f, double d, double e, double g, CallbackInfo ci) {
-        Profiler profiler = Profiler.getMainProfiler();
-        profiler.pop();
-    }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/particle/ParticleEngine;render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V",

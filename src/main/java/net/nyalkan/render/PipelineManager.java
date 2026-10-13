@@ -1,5 +1,6 @@
 package net.nyalkan.render;
 
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.RenderType;
 import net.nyalkan.render.chunk.build.thread.ThreadBuilderPack;
@@ -29,6 +30,7 @@ public abstract class PipelineManager {
 
     static GraphicsPipeline terrainShaderEarlyZ, terrainShader, fastBlitPipeline, fastBlitPipelineNonInverted;
     public static GraphicsPipeline particleInstancedPipeline;
+    private static GraphicsPipeline cloudsPipeline;
 
     private static Function<TerrainRenderType, GraphicsPipeline> shaderGetter;
 
@@ -48,6 +50,7 @@ public abstract class PipelineManager {
         terrainShader = createPipeline("terrain", "terrain", "terrain", TERRAIN_VERTEX_FORMAT);
         fastBlitPipeline = createPipeline("blit", "blit", "blit", CustomVertexFormat.NONE);
         fastBlitPipelineNonInverted = createPipeline("blit", "blit_noninverted", "blit", CustomVertexFormat.NONE);
+        cloudsPipeline = createPipeline("clouds", "clouds", "clouds", DefaultVertexFormat.POSITION_COLOR);
         particleInstancedPipeline = createInstancedPipeline("particle_instanced", CustomVertexFormat.PARTICLE_QUAD, CustomVertexFormat.PARTICLE_INSTANCE);
     }
 
@@ -97,10 +100,13 @@ public abstract class PipelineManager {
 
     public static GraphicsPipeline getFastBlitPipelineNonInverted() { return fastBlitPipelineNonInverted; }
 
+    public static GraphicsPipeline getCloudsPipeline() { return cloudsPipeline; }
+
     public static void destroyPipelines() {
         terrainShaderEarlyZ.cleanUp();
         terrainShader.cleanUp();
         fastBlitPipeline.cleanUp();
         fastBlitPipelineNonInverted.cleanUp();
+        cloudsPipeline.cleanUp();
     }
 }
