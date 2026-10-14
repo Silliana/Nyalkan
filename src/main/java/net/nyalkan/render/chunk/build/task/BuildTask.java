@@ -1,7 +1,9 @@
 package net.nyalkan.render.chunk.build.task;
 
+import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.chunk.VisGraph;
 import net.minecraft.core.BlockPos;
@@ -13,6 +15,9 @@ import net.minecraft.world.phys.Vec3;
 import net.nyalkan.Initializer;
 import net.nyalkan.render.chunk.RenderSection;
 import net.nyalkan.render.chunk.WorldRenderer;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.nyalkan.render.bake.BakedMesh;
+import net.nyalkan.render.bake.BlockEntityBakery;
 import net.nyalkan.render.chunk.build.BlockRenderer;
 import net.nyalkan.render.chunk.build.LiquidRenderer;
 import net.nyalkan.render.chunk.build.RenderRegion;
@@ -23,6 +28,9 @@ import net.nyalkan.render.vertex.TerrainBufferBuilder;
 import net.nyalkan.render.vertex.TerrainRenderType;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
+
+import java.util.List;
+import java.util.Map;
 
 public class BuildTask extends ChunkTask {
     @Nullable
@@ -51,12 +59,18 @@ public class BuildTask extends ChunkTask {
         float x = (float) vec3.x;
         float y = (float) vec3.y;
         float z = (float) vec3.z;
+        builderResources.animatedSprites.clear();
         CompileResult compileResult = this.compile(x, y, z, builderResources);
 
         CompiledSection compiledSection = new CompiledSection();
         compiledSection.blockEntities.addAll(compileResult.blockEntities);
+        compiledSection.bakedBlockEntities.addAll(compileResult.bakedBlockEntities);
+        if (!compileResult.partialBlockEntities.isEmpty())
+            compiledSection.partialBlockEntities = new ReferenceOpenHashSet<>(compileResult.partialBlockEntities);
         compiledSection.transparencyState = compileResult.transparencyState;
         compiledSection.isCompletelyEmpty = compileResult.renderedLayers.isEmpty();
+        if (!builderResources.animatedSprites.isEmpty())
+            compiledSection.animatedSprites = builderResources.animatedSprites.toArray(new TextureAtlasSprite[0]);
         compileResult.compiledSection = compiledSection;
 
         if (this.cancelled.get()) {
@@ -113,7 +127,7 @@ public class BuildTask extends ChunkTask {
                     if (blockState.hasBlockEntity()) {
                         BlockEntity blockEntity = this.region.getBlockEntity(blockPos);
                         if (blockEntity != null) {
-                            this.handleBlockEntity(compileResult, blockEntity);
+                            this.handleBlockEntity(compileResult, blockEntity, blockState, blockPos, pos, bufferBuilders, blockRenderer);
                         }
                     }
 
@@ -135,6 +149,9 @@ public class BuildTask extends ChunkTask {
                         // one pass per type
                         for (net.minecraft.client.renderer.RenderType modelRenderType : blockRenderer.prepareBlock(blockState, blockPos, pos)) {
                             renderType = TerrainRenderType.get(modelRenderType);
+                            // modded chunk layers
+                            if (renderType == null)
+                                renderType = modelRenderType.sortOnUpload() ? TerrainRenderType.TRANSLUCENT : TerrainRenderType.CUTOUT_MIPPED;
 
                             bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
                             bufferBuilder.setBlockAttributes(blockState);
@@ -196,13 +213,30 @@ public class BuildTask extends ChunkTask {
         return renderType;
     }
 
-    private <E extends BlockEntity> void handleBlockEntity(CompileResult compileResult, E blockEntity) {
+    private <E extends BlockEntity> void handleBlockEntity(CompileResult compileResult, E blockEntity, BlockState blockState, BlockPos blockPos,
+                                                           Vector3f pos, ThreadBuilderPack bufferBuilders, BlockRenderer blockRenderer) {
         BlockEntityRenderer<E> blockEntityRenderer = Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(blockEntity);
         if (blockEntityRenderer != null) {
-            compileResult.blockEntities.add(blockEntity);
-            if (blockEntityRenderer.shouldRenderOffScreen(blockEntity)) {
-                compileResult.globalBlockEntities.add(blockEntity);
+            BakedMesh mesh = BlockEntityBakery.get(blockEntity, blockState, blockEntityRenderer);
+            if (mesh != null) {
+                for (Map.Entry<TerrainRenderType, List<BakedQuad>> layer : mesh.layers().entrySet()) {
+                    pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
+                    TerrainBufferBuilder bufferBuilder = getBufferBuilder(bufferBuilders, layer.getKey());
+                    bufferBuilder.setBlockAttributes(blockState);
+                    blockRenderer.renderQuads(bufferBuilder, blockState, blockPos, pos, layer.getValue());
+                }
+                if (!mesh.live()) {
+                    compileResult.bakedBlockEntities.add(blockEntity);
+                    return;
+                }
+                compileResult.partialBlockEntities.add(blockEntity);
             }
+
+            // vanilla renders global ones
+            if (blockEntityRenderer.shouldRenderOffScreen(blockEntity))
+                compileResult.globalBlockEntities.add(blockEntity);
+            else
+                compileResult.blockEntities.add(blockEntity);
         }
 
     }
