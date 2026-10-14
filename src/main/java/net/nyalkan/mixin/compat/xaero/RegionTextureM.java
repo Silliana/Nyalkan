@@ -19,12 +19,12 @@ public abstract class RegionTextureM {
         GlTexture.texParameteri(target, pname, (int) param);
     }
 
-    @Redirect(method = {"uploadBufferHelper", "writeToUnpackPBO"}, require = 0, at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL11;glGetError()I"))
+    @Redirect(method = {"uploadBufferHelper*", "writeToUnpackPBO*"}, require = 0, at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL11;glGetError()I"))
     private int nyalkan$glGetError() {
         return 0;
     }
 
-    @Redirect(method = "uploadBufferHelper", require = 0, at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL11;glGetTexLevelParameteri(III)I"))
+    @Redirect(method = "uploadBufferHelper*", require = 0, at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL11;glGetTexLevelParameteri(III)I"))
     private int nyalkan$glGetTexLevelParameteri(int target, int level, int pname) {
         return GlTexture.getTexLevelParameter(target, level, pname);
     }
