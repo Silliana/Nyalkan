@@ -24,6 +24,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.nio.ByteBuffer;
@@ -237,6 +238,20 @@ public class GlStateManagerM {
     private static void nyalkan$glGenRenderbuffers(CallbackInfoReturnable<Integer> cir) {
         RenderSystem.assertOnRenderThreadOrInit();
         cir.setReturnValue(GlRenderbuffer.genId());
+    }
+
+    @Inject(method = "_glDeleteFramebuffers", at = @At("HEAD"), cancellable = true, remap = false)
+    private static void nyalkan$glDeleteFramebuffers(int id, CallbackInfo ci) {
+        RenderSystem.assertOnRenderThreadOrInit();
+        GlFramebuffer.deleteFramebuffer(id);
+        ci.cancel();
+    }
+
+    @Inject(method = "_glDeleteRenderbuffers", at = @At("HEAD"), cancellable = true, remap = false)
+    private static void nyalkan$glDeleteRenderbuffers(int id, CallbackInfo ci) {
+        RenderSystem.assertOnRenderThreadOrInit();
+        GlRenderbuffer.deleteRenderbuffer(id);
+        ci.cancel();
     }
 
     @Overwrite(remap = false)

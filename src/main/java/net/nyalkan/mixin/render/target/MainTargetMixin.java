@@ -2,6 +2,7 @@ package net.nyalkan.mixin.render.target;
 
 import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import net.nyalkan.render.gui.HudCache;
 import net.nyalkan.vulkan.Renderer;
 import net.nyalkan.vulkan.Vulkan;
 import net.nyalkan.vulkan.framebuffer.SwapChain;
@@ -25,6 +26,11 @@ public class MainTargetMixin extends RenderTarget {
 
     @Override
     public void bindWrite(boolean updateScissor) {
+        RenderTarget hud = HudCache.captureTarget();
+        if (hud != null) {
+            hud.bindWrite(updateScissor);
+            return;
+        }
         Renderer.getInstance().getMainPass().rebindMainTarget();
     }
 

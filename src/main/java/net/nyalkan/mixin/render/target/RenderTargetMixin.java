@@ -124,7 +124,7 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
             this.colorTextureId = -1;
         }
         if (this.frameBufferId > -1) {
-            GlFramebuffer.releaseFramebuffer(this.frameBufferId);
+            GlFramebuffer.deleteFramebuffer(this.frameBufferId);
             this.frameBufferId = -1;
         }
     }

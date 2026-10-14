@@ -1,9 +1,11 @@
 package net.nyalkan.gl;
 
 import net.nyalkan.render.immediate.ImmediateBatcher;
+import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import net.minecraft.client.Minecraft;
+import net.nyalkan.render.gui.HudCache;
 import net.nyalkan.vulkan.Renderer;
 import net.nyalkan.vulkan.Vulkan;
 import net.nyalkan.vulkan.framebuffer.Framebuffer;
@@ -12,6 +14,7 @@ import net.nyalkan.vulkan.texture.VTextureSelector;
 import net.nyalkan.vulkan.texture.VulkanImage;
 import net.nyalkan.vulkan.util.DrawUtil;
 import org.lwjgl.opengl.GL11;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL30;
 
 import static org.lwjgl.vulkan.VK11.VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -78,16 +81,19 @@ public class GlFramebuffer {
             return;
         }
 
+        RenderTarget hud = id == 0 ? HudCache.captureTarget() : null;
+        if (hud != null)
+            id = hud.frameBufferId;
+
         if (boundId == id)
             return;
 
         if (id == 0) {
             Renderer.getInstance().endRenderPass();
 
-            if (Renderer.isRecording()) {
-                RenderTarget renderTarget = Minecraft.getInstance().getMainRenderTarget();
-                renderTarget.bindWrite(true);
-            }
+            // mods swap main target
+            if (Renderer.isRecording())
+                Renderer.getInstance().getMainPass().rebindMainTarget();
 
             boundFramebuffer = null;
             boundId = 0;
@@ -97,9 +103,10 @@ public class GlFramebuffer {
             if (glFramebuffer == null)
                 throw new NullPointerException("No Framebuffer with ID: %d ".formatted(id));
 
-            if (glFramebuffer.framebuffer != null) {
+            if (glFramebuffer.framebuffer != null)
                 beginRendering(glFramebuffer);
-            }
+            else if (glFramebuffer.colorAttachment != null)
+                glFramebuffer.createAndBind();
 
             boundFramebuffer = glFramebuffer;
             boundId = id;
@@ -112,8 +119,10 @@ public class GlFramebuffer {
         }
     }
 
+    // ignores swapped main targets
     private static boolean isMainTarget(int id) {
-        return id == 0 || id == Minecraft.getInstance().getMainRenderTarget().frameBufferId;
+        RenderTarget main = Minecraft.getInstance().getMainRenderTarget();
+        return id == 0 || main instanceof MainTarget && id == main.frameBufferId;
     }
 
     // whole image colour copy
@@ -148,28 +157,43 @@ public class GlFramebuffer {
         DrawUtil.blitToScreen(!isMainTarget(readBoundId));
     }
 
-    public static void releaseFramebuffer(int id) {
-        GlFramebuffer glFramebuffer = map.remove(id);
-        if (glFramebuffer == null)
-            return;
-        if (boundFramebuffer == glFramebuffer)
-            boundFramebuffer = null;
-        if (glFramebuffer.framebuffer != null)
-            glFramebuffer.cleanUp();
+    public static void replaceImage(VulkanImage old, @Nullable VulkanImage image) {
+        for (GlFramebuffer glFramebuffer : map.values()) {
+            boolean color = glFramebuffer.colorAttachment == old;
+            boolean depth = glFramebuffer.depthAttachment == old;
+            if (!color && !depth)
+                continue;
+
+            if (color)
+                glFramebuffer.colorAttachment = image;
+            if (depth)
+                glFramebuffer.depthAttachment = image;
+
+            boolean bound = glFramebuffer == boundFramebuffer;
+            if (bound)
+                Renderer.getInstance().endRenderPass();
+            if (glFramebuffer.framebuffer != null)
+                glFramebuffer.cleanUp();
+            if (bound)
+                glFramebuffer.createAndBind();
+        }
     }
 
+    // only bound one unbinds
     public static void deleteFramebuffer(int id) {
-        if (id == 0) {
+        GlFramebuffer glFramebuffer = id == 0 ? null : map.remove(id);
+        if (glFramebuffer == null)
             return;
+        if (boundFramebuffer == glFramebuffer) {
+            boundFramebuffer = null;
+            boundId = 0;
         }
-
-        boundFramebuffer = map.remove(id);
-
-        if (boundFramebuffer == null)
-            throw new NullPointerException("bound framebuffer is null");
-
-        boundFramebuffer.cleanUp();
-        boundFramebuffer = null;
+        if (readBoundFramebuffer == glFramebuffer) {
+            readBoundFramebuffer = null;
+            readBoundId = 0;
+        }
+        if (glFramebuffer.framebuffer != null)
+            glFramebuffer.cleanUp();
     }
 
     public static void framebufferTexture2D(int target, int attachment, int texTarget, int texture, int level) {
@@ -188,7 +212,8 @@ public class GlFramebuffer {
             throw new UnsupportedOperationException();
         }
 
-        boundFramebuffer.setAttachmentTexture(attachment, texture);
+        if (boundFramebuffer != null)
+            boundFramebuffer.setAttachmentTexture(attachment, texture);
     }
 
     public static void framebufferRenderbuffer(int target, int attachment, int renderbuffertarget, int renderbuffer) {

@@ -109,6 +109,11 @@ public final class HudCache {
         return capturing != null;
     }
 
+    public static RenderTarget captureTarget() {
+        HudCache cache = capturing;
+        return cache == null || cache.segment < 0 ? null : cache.targets.back(cache.segment);
+    }
+
     public void render(GuiGraphics graphics, Runnable draw) {
         if (isCapturing() && this.fixedHz == 0 || this.forceLive || this.begin(0) == Mode.LIVE) {
             this.lastDraw = System.nanoTime();

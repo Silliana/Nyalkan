@@ -319,6 +319,10 @@ public class Renderer {
         return frameCount;
     }
 
+    public static void waitForFrame(int frameIndex) {
+        vkWaitForFences(DeviceManager.vkDevice, INSTANCE.inFlightFences.get(frameIndex), true, VUtil.UINT64_MAX);
+    }
+
     public void endFrame() {
         frameCount++;
 

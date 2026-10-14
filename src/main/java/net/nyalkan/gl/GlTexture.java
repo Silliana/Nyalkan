@@ -9,6 +9,7 @@ import net.nyalkan.vulkan.texture.VulkanImage;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
+import net.nyalkan.vulkan.Renderer;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -59,8 +60,10 @@ public class GlTexture {
     public static void glDeleteTextures(int i) {
         GlTexture glTexture = map.remove(i);
         VulkanImage image = glTexture != null ? glTexture.vulkanImage : null;
-        if (image != null)
+        if (image != null) {
+            GlFramebuffer.replaceImage(image, null);
             MemoryManager.getInstance().addToFreeable(image);
+        }
     }
 
     public static GlTexture getTexture(int id) {
@@ -230,6 +233,11 @@ public class GlTexture {
         VulkanImage image = boundTexture.vulkanImage;
 
         GlBuffer buffer = GlBuffer.getPixelPackBufferBound();
+        if (buffer != null && Renderer.isRecording()) {
+            buffer.readImage(image, (int) pixels);
+            return;
+        }
+
         long ptr;
         if (buffer != null) {
             buffer.data.position((int) pixels);
@@ -294,8 +302,7 @@ public class GlTexture {
     }
 
     void allocateImage(int width, int height, int vkFormat) {
-        if (this.vulkanImage != null)
-            this.vulkanImage.free();
+        VulkanImage old = this.vulkanImage;
 
         if (VulkanImage.isDepthFormat(vkFormat))
             this.vulkanImage = VulkanImage.createDepthImage(vkFormat,
@@ -308,6 +315,11 @@ public class GlTexture {
                     .setFormat(vkFormat)
                     .addUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
                     .createVulkanImage();
+
+        if (old != null) {
+            GlFramebuffer.replaceImage(old, this.vulkanImage);
+            old.free();
+        }
     }
 
     void updateSampler() {
