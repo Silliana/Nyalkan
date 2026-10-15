@@ -117,7 +117,7 @@ public abstract class WindowMixin {
             return;
         }
 
-        if (this.fullscreen) {
+        if (this.fullscreen && !config.windowedFullscreen) {
             VideoModeSet.VideoMode videoMode = config.videoMode;
             VideoModeSet set = VideoModeManager.getFromVideoMode(videoMode);
             if (set == null || !set.hasRefreshRate(videoMode.refreshRate)) {
@@ -132,7 +132,7 @@ public abstract class WindowMixin {
             this.height = videoMode.height;
             GLFW.glfwSetWindowMonitor(this.window, GLFW.glfwGetPrimaryMonitor(), this.x, this.y, this.width, this.height, videoMode.refreshRate);
             this.nyalkan$wasOnFullscreen = true;
-        } else if (config.windowedFullscreen) {
+        } else if (this.fullscreen) {
             VideoModeSet.VideoMode videoMode = VideoModeManager.getOsVideoMode();
 
             this.nyalkan$saveWindowed();

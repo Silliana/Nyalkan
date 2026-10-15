@@ -36,6 +36,7 @@ public class VOptionScreen extends Screen {
 
     private VButtonWidget doneButton;
     private VButtonWidget applyButton;
+    private VButtonWidget undoButton;
 
     private final List<VButtonWidget> pageButtons = Lists.newArrayList();
     private final List<VButtonWidget> buttons = Lists.newArrayList();
@@ -108,6 +109,7 @@ public class VOptionScreen extends Screen {
         buildPage();
 
         this.applyButton.active = false;
+        this.undoButton.active = false;
     }
 
     private void buildLists(int left, int top, int listWidth, int listHeight, int itemHeight) {
@@ -163,7 +165,10 @@ public class VOptionScreen extends Screen {
                 x0, y0,
                 buttonWidth, buttonHeight,
                 CommonComponents.GUI_DONE,
-                button -> this.minecraft.setScreen(this.parent)
+                button -> {
+                    this.applyOptions();
+                    this.minecraft.setScreen(this.parent);
+                }
         );
 
         buttonWidth = minecraft.font.width(Component.translatable("nyalkan.options.buttons.apply")) + 2 * padding;
@@ -175,6 +180,15 @@ public class VOptionScreen extends Screen {
                 button -> this.applyOptions()
         );
 
+        buttonWidth = minecraft.font.width(Component.translatable("nyalkan.options.buttons.undo")) + 2 * padding;
+        x0 -= (buttonWidth + buttonMargin);
+        this.undoButton = new VButtonWidget(
+                x0, y0,
+                buttonWidth, buttonHeight,
+                Component.translatable("nyalkan.options.buttons.undo"),
+                button -> this.rebuildWidgets()
+        );
+
         buttonWidth = minecraft.font.width(Component.translatable("nyalkan.options.buttons.kofi")) + 10;
         x0 = (this.width - buttonWidth - rightMargin);
         this.supportButton = new VButtonWidget(
@@ -184,10 +198,12 @@ public class VOptionScreen extends Screen {
                 button -> Util.getPlatform().openUri("https://ko-fi.com/xcollateral")
         );
 
+        this.buttons.add(this.undoButton);
         this.buttons.add(this.applyButton);
         this.buttons.add(this.doneButton);
         this.buttons.add(this.supportButton);
 
+        this.addWidget(this.undoButton);
         this.addWidget(this.applyButton);
         this.addWidget(this.doneButton);
         this.addWidget(this.supportButton);
@@ -299,6 +315,7 @@ public class VOptionScreen extends Screen {
         }
 
         this.applyButton.active = modified;
+        this.undoButton.active = modified;
     }
 
     private void setOptionList(int i) {
@@ -316,5 +333,7 @@ public class VOptionScreen extends Screen {
         }
 
         Initializer.CONFIG.write();
+        this.minecraft.options.save();
+        this.updateState();
     }
 }

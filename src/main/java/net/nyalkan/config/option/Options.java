@@ -17,6 +17,9 @@ import java.util.stream.IntStream;
 
 public abstract class Options {
     public static boolean fullscreenDirty = false;
+    private static final int WINDOWED = 0;
+    private static final int BORDERLESS = 1;
+    private static final int FULLSCREEN = 2;
     static Config config = Initializer.CONFIG;
     static Minecraft minecraft = Minecraft.getInstance();
     static Window window = minecraft.getWindow();
@@ -26,9 +29,10 @@ public abstract class Options {
         var videoMode = config.videoMode;
         var videoModeSet = VideoModeManager.getFromVideoMode(videoMode);
 
+        // saved mode may be stale
         if (videoModeSet == null) {
-            videoModeSet = VideoModeSet.getDummy();
-            videoMode = videoModeSet.getVideoMode(-1);
+            videoModeSet = VideoModeManager.getFirstAvailable();
+            videoMode = videoModeSet.getVideoMode();
         }
 
         VideoModeManager.selectedVideoMode = videoMode;
@@ -77,19 +81,21 @@ public abstract class Options {
                 new OptionBlock("", new Option<?>[]{
                         resolutionOption,
                         RefreshRate,
-                        new SwitchOption(Component.translatable("options.fullscreen"),
+                        new CyclingOption<>(Component.translatable("nyalkan.options.windowMode"),
+                                new Integer[]{WINDOWED, BORDERLESS, FULLSCREEN},
                                 value -> {
-                                    minecraftOptions.fullscreen().set(value);
-//                            window.toggleFullScreen();
+                                    // f11 returns to windowed
+                                    config.windowedFullscreen = value == BORDERLESS;
+                                    minecraftOptions.fullscreen().set(value != WINDOWED);
                                     fullscreenDirty = true;
                                 },
-                                () -> minecraftOptions.fullscreen().get()),
-                        new SwitchOption(Component.translatable("nyalkan.options.windowedFullscreen"),
-                                value -> {
-                                    config.windowedFullscreen = value;
-                                    fullscreenDirty = true;
-                                },
-                                () -> config.windowedFullscreen),
+                                () -> !minecraftOptions.fullscreen().get() ? WINDOWED
+                                        : config.windowedFullscreen ? BORDERLESS : FULLSCREEN)
+                                .setTranslator(value -> Component.translatable(switch (value) {
+                                    case BORDERLESS -> "nyalkan.options.windowMode.borderless";
+                                    case FULLSCREEN -> "nyalkan.options.windowMode.fullscreen";
+                                    default -> "nyalkan.options.windowMode.windowed";
+                                })),
                         new RangeOption(Component.translatable("options.framerateLimit"),
                                 10, 260, 10,
                                 value -> Component.nullToEmpty(value == 260 ?

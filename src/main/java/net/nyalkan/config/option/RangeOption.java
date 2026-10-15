@@ -30,7 +30,7 @@ public class RangeOption extends Option<Integer> {
     }
 
     public Component getName() {
-        return Component.nullToEmpty(this.name.getString() + ": " + this.getNewValue().toString());
+        return Component.nullToEmpty(this.name.getString() + ": " + this.getDisplayedValue().getString());
     }
 
     public float getScaledValue() {

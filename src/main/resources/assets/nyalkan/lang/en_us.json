@@ -7,6 +7,7 @@
   "nyalkan.options.pages.other": "Other",
 
   "nyalkan.options.buttons.apply": "Apply",
+  "nyalkan.options.buttons.undo": "Undo",
   "nyalkan.options.buttons.kofi": "Support me",
 
   "nyalkan.options.advCulling": "Advanced Chunk Culling",
@@ -70,5 +71,8 @@
   "nyalkan.options.uniqueOpaqueLayer": "Unique opaque layer",
   "nyalkan.options.uniqueOpaqueLayer.tooltip": "Use a unique render layer for opaque terrain to improve performance.",
 
-  "nyalkan.options.windowedFullscreen": "Windowed Fullscreen"
+  "nyalkan.options.windowMode": "Window Mode",
+  "nyalkan.options.windowMode.windowed": "Windowed",
+  "nyalkan.options.windowMode.borderless": "Borderless",
+  "nyalkan.options.windowMode.fullscreen": "Fullscreen"
 }
