@@ -27,6 +27,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import java.util.function.IntSupplier;
 import java.util.function.LongSupplier;
@@ -150,6 +151,18 @@ public abstract class WindowMixin {
             GLFW.glfwSetWindowAttrib(this.window, GLFW_DECORATED, GLFW_TRUE);
             this.nyalkan$wasOnFullscreen = false;
         }
+    }
+
+    // vanilla slider picks mode
+    @Inject(method = "setPreferredFullscreenVideoMode", at = @At("TAIL"))
+    private void nyalkan$preferredMode(Optional<VideoMode> mode, CallbackInfo ci) {
+        Config config = Initializer.CONFIG;
+        if (config == null)
+            return;
+
+        config.videoMode = mode.map(m -> new VideoModeSet.VideoMode(m.getWidth(), m.getHeight(), m.getRedBits(), m.getRefreshRate()))
+                .orElseGet(VideoModeManager::getOsVideoMode);
+        config.write();
     }
 
     @Unique

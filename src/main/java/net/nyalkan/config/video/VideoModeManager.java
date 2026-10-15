@@ -1,11 +1,14 @@
 package net.nyalkan.config.video;
 
+import com.mojang.blaze3d.platform.VideoMode;
+import net.minecraft.client.Minecraft;
 import net.nyalkan.Initializer;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWVidMode;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.lwjgl.glfw.GLFW.*;
 
@@ -21,8 +24,12 @@ public abstract class VideoModeManager {
         videoModeSets = populateVideoResolutions(GLFW.glfwGetPrimaryMonitor());
     }
 
+    // keeps vanilla slider in sync
     public static void applySelectedVideoMode() {
         Initializer.CONFIG.videoMode = selectedVideoMode;
+        VideoModeSet.VideoMode mode = selectedVideoMode;
+        Minecraft.getInstance().getWindow().setPreferredFullscreenVideoMode(Optional.of(
+                new VideoMode(mode.width, mode.height, mode.bitDepth, mode.bitDepth, mode.bitDepth, mode.refreshRate)));
     }
 
     public static VideoModeSet[] getVideoResolutions() {
