@@ -3,6 +3,7 @@ package net.nyalkan.config.option;
 import net.minecraft.network.chat.Component;
 import net.nyalkan.config.gui.widget.OptionWidget;
 
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -19,7 +20,7 @@ public abstract class Option<T> {
 
     protected Function<T, Component> translator;
 
-    protected boolean active;
+    protected BooleanSupplier enabled = () -> true;
     protected Runnable onChange;
 
     public Option(Component name, Consumer<T> setter, Supplier<T> getter, Function<T, Component> translator) {
@@ -57,9 +58,17 @@ public abstract class Option<T> {
         return this;
     }
 
-    public Option<T> setActive(boolean active) {
-        this.active = active;
+    public Option<T> setEnabled(BooleanSupplier enabled) {
+        this.enabled = enabled;
         return this;
+    }
+
+    public boolean isEnabled() {
+        return this.enabled.getAsBoolean();
+    }
+
+    public Component getLabel() {
+        return this.name;
     }
 
     public abstract OptionWidget<?> createOptionWidget(int x, int y, int width, int height);

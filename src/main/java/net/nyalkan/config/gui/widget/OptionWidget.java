@@ -56,6 +56,7 @@ public abstract class OptionWidget<O extends Option<?>> extends VAbstractWidget
             return;
         }
 
+        this.active = this.option == null || this.option.isEnabled();
         this.updateDisplayedValue();
 
         this.controlHovered = mouseX >= this.controlX && mouseY >= this.y && mouseX < this.controlX + this.controlWidth && mouseY < this.y + this.height;

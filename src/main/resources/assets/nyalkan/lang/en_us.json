@@ -8,7 +8,6 @@
 
   "nyalkan.options.buttons.apply": "Apply",
   "nyalkan.options.buttons.undo": "Undo",
-  "nyalkan.options.buttons.kofi": "Support me",
 
   "nyalkan.options.advCulling": "Advanced Chunk Culling",
   "nyalkan.options.advCulling.aggressive": "Aggressive",
@@ -74,5 +73,19 @@
   "nyalkan.options.windowMode": "Window Mode",
   "nyalkan.options.windowMode.windowed": "Windowed",
   "nyalkan.options.windowMode.borderless": "Borderless",
-  "nyalkan.options.windowMode.fullscreen": "Fullscreen"
+  "nyalkan.options.windowMode.fullscreen": "Fullscreen",
+
+  "nyalkan.options.title": "Nyalkan Settings",
+  "nyalkan.options.button": "Nyalkan Settings...",
+  "nyalkan.options.search": "Search...",
+  "nyalkan.options.search.none": "No matching settings",
+
+  "nyalkan.options.settingsStyle": "Settings Style",
+  "nyalkan.options.settingsStyle.modern": "Modern",
+  "nyalkan.options.settingsStyle.classic": "Classic",
+  "nyalkan.options.settingsStyle.tooltip": "Modern replaces Video Settings with this screen. Classic keeps the vanilla Video Settings screen with a Nyalkan button. Applies the next time you open Video Settings.",
+  "nyalkan.options.settingsStyle.choose": "Pick your settings style",
+  "nyalkan.options.settingsStyle.later": "You can switch any time under Settings Style",
+  "nyalkan.options.settingsStyle.modern.desc": "One tidy screen with pages and search for every video and Nyalkan setting.",
+  "nyalkan.options.settingsStyle.classic.desc": "The vanilla Video Settings screen, with Nyalkan's options one click away."
 }

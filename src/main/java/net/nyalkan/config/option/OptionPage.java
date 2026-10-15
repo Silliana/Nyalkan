@@ -18,6 +18,10 @@ public class OptionPage {
         this.optionList.addAll(optionBlocks);
     }
 
+    public OptionBlock[] getOptionBlocks() {
+        return this.optionBlocks;
+    }
+
     public VOptionList getOptionList() {
         return this.optionList;
     }

@@ -43,6 +43,7 @@ public class Config {
     public boolean bakedBlockEntities = true;
     public boolean mipmapSpriteFix = true;
     public int device = -1;
+    public int settingsStyle = 0;
 
     public int ambientOcclusion = 1;
 

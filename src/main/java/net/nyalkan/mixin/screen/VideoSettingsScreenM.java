@@ -9,7 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.OptionsSubScreen;
 import net.minecraft.client.gui.screens.options.VideoSettingsScreen;
 import net.minecraft.network.chat.Component;
-import net.nyalkan.config.gui.VOptionScreen;
+import net.nyalkan.config.gui.SettingsStyle;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -27,8 +27,8 @@ public abstract class VideoSettingsScreenM extends OptionsSubScreen {
     @Redirect(method = "addOptions", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/gui/components/OptionsList;addSmall([Lnet/minecraft/client/OptionInstance;)V"))
     private void redirectAddSmallOptions(OptionsList list, OptionInstance<?>[] options) {
-        Button nyalkanButton = Button.builder(Component.literal("Nyalkan Settings..."),
-                        b -> this.minecraft.setScreen(new VOptionScreen(Component.literal("Nyalkan Settings"), this)))
+        Button nyalkanButton = Button.builder(Component.translatable("nyalkan.options.button"),
+                        b -> this.minecraft.setScreen(SettingsStyle.modern(this)))
                 .build();
 
         for (int i = 0; i < options.length; i += 2) {

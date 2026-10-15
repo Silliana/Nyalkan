@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
@@ -12,12 +13,14 @@ import net.minecraft.util.FormattedCharSequence;
 import net.nyalkan.Initializer;
 import net.nyalkan.config.gui.widget.VAbstractWidget;
 import net.nyalkan.config.gui.widget.VButtonWidget;
+import net.nyalkan.config.option.Option;
 import net.nyalkan.config.option.OptionPage;
 import net.nyalkan.config.option.Options;
 import net.nyalkan.vulkan.util.ColorUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class VOptionScreen extends Screen {
     public final static int RED = ColorUtil.ARGB.pack(0.3f, 0.0f, 0.0f, 0.8f);
@@ -32,14 +35,18 @@ public class VOptionScreen extends Screen {
     private int tooltipY;
     private int tooltipWidth;
 
-    private VButtonWidget supportButton;
-
     private VButtonWidget doneButton;
     private VButtonWidget applyButton;
     private VButtonWidget undoButton;
 
     private final List<VButtonWidget> pageButtons = Lists.newArrayList();
     private final List<VButtonWidget> buttons = Lists.newArrayList();
+
+    private EditBox searchBox;
+    private String search = "";
+    private VOptionList searchList;
+    private VOptionList shownList;
+    private int listX, listY, listWidth, listHeight, itemHeight;
 
     public VOptionScreen(Component title, Screen parent) {
         super(title);
@@ -89,7 +96,13 @@ public class VOptionScreen extends Screen {
         int listWidth = Math.min((int) (this.width * 0.65f), 420);
         int listHeight = this.height - top - bottom;
 
+        this.listX = leftMargin;
+        this.listY = top;
+        this.listWidth = listWidth;
+        this.listHeight = listHeight;
+        this.itemHeight = itemHeight;
         this.buildLists(leftMargin, top, listWidth, listHeight, itemHeight);
+        this.searchList = this.buildSearchList(this.search);
 
         int x = leftMargin + listWidth + 10;
 //        int width = Math.min(this.width - this.tooltipX - 10, 200);
@@ -135,7 +148,8 @@ public class VOptionScreen extends Screen {
                 x += width + 1;
         }
 
-        this.pageButtons.get(this.currentListIdx).setSelected(true);
+        if (this.searchList == null)
+            this.pageButtons.get(this.currentListIdx).setSelected(true);
     }
 
     private void buildPage() {
@@ -143,11 +157,16 @@ public class VOptionScreen extends Screen {
         this.pageButtons.clear();
         this.clearWidgets();
 
-//        this.addPageButtons(20, 6, 60, 20, false);
+        this.searchBox = new EditBox(this.font, this.listX, 12, this.listWidth, 18, Component.translatable("nyalkan.options.search"));
+        this.searchBox.setHint(Component.translatable("nyalkan.options.search"));
+        this.searchBox.setValue(this.search);
+        this.searchBox.setResponder(this::onSearch);
+        this.addWidget(this.searchBox);
+
         this.addPageButtons(10, 40, 80, 22, true);
 
-        VOptionList currentList = this.optionPages.get(this.currentListIdx).getOptionList();
-        this.addWidget(currentList);
+        this.shownList = this.currentList();
+        this.addWidget(this.shownList);
 
         this.addButtons();
     }
@@ -189,24 +208,13 @@ public class VOptionScreen extends Screen {
                 button -> this.rebuildWidgets()
         );
 
-        buttonWidth = minecraft.font.width(Component.translatable("nyalkan.options.buttons.kofi")) + 10;
-        x0 = (this.width - buttonWidth - rightMargin);
-        this.supportButton = new VButtonWidget(
-                x0, 6,
-                buttonWidth, buttonHeight,
-                Component.translatable("nyalkan.options.buttons.kofi"),
-                button -> Util.getPlatform().openUri("https://ko-fi.com/xcollateral")
-        );
-
         this.buttons.add(this.undoButton);
         this.buttons.add(this.applyButton);
         this.buttons.add(this.doneButton);
-        this.buttons.add(this.supportButton);
 
         this.addWidget(this.undoButton);
         this.addWidget(this.applyButton);
         this.addWidget(this.doneButton);
-        this.addWidget(this.supportButton);
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -259,10 +267,16 @@ public class VOptionScreen extends Screen {
 
         RenderSystem.enableBlend();
 
-        VOptionList currentList = this.optionPages.get(this.currentListIdx).getOptionList();
+        this.searchBox.render(guiGraphics, mouseX, mouseY, delta);
+
+        VOptionList currentList = this.currentList();
         currentList.updateState(mouseX, mouseY);
         currentList.renderWidget(mouseX, mouseY);
         renderButtons(mouseX, mouseY);
+
+        if (currentList.getTotalLength() == 0)
+            guiGraphics.drawCenteredString(this.font, Component.translatable("nyalkan.options.search.none"),
+                    this.listX + this.listWidth / 2, this.listY + 10, 0xA0A0A0);
 
         List<FormattedCharSequence> list = getHoveredButtonTooltip(currentList, mouseX, mouseY);
         if (list != null) {
@@ -318,8 +332,43 @@ public class VOptionScreen extends Screen {
         this.undoButton.active = modified;
     }
 
+    private VOptionList currentList() {
+        return this.searchList != null ? this.searchList : this.optionPages.get(this.currentListIdx).getOptionList();
+    }
+
+    private VOptionList buildSearchList(String text) {
+        String query = text.trim().toLowerCase(Locale.ROOT);
+        if (query.isEmpty())
+            return null;
+
+        List<Option<?>> matches = new ArrayList<>();
+        for (OptionPage page : this.optionPages)
+            for (OptionBlock block : page.getOptionBlocks())
+                for (Option<?> option : block.options())
+                    if (option.getLabel().getString().toLowerCase(Locale.ROOT).contains(query))
+                        matches.add(option);
+
+        VOptionList list = new VOptionList(this.listX, this.listY, this.listWidth, this.listHeight, this.itemHeight);
+        list.addAll(matches.toArray(new Option<?>[0]));
+        return list;
+    }
+
+    private void onSearch(String text) {
+        this.search = text;
+        this.searchList = this.buildSearchList(text);
+
+        this.removeWidget(this.shownList);
+        this.shownList = this.currentList();
+        this.addWidget(this.shownList);
+
+        for (int i = 0; i < this.pageButtons.size(); i++)
+            this.pageButtons.get(i).setSelected(this.searchList == null && i == this.currentListIdx);
+    }
+
     private void setOptionList(int i) {
         this.currentListIdx = i;
+        this.search = "";
+        this.searchList = null;
 
         this.buildPage();
 

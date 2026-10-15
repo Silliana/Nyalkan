@@ -7,12 +7,14 @@ import net.minecraft.network.chat.Component;
 import net.nyalkan.Initializer;
 import net.nyalkan.config.Config;
 import net.nyalkan.config.gui.OptionBlock;
+import net.nyalkan.config.gui.SettingsStyle;
 import net.nyalkan.config.video.VideoModeManager;
 import net.nyalkan.config.video.VideoModeSet;
 import net.nyalkan.render.chunk.build.light.LightMode;
 import net.nyalkan.vulkan.Renderer;
 import net.nyalkan.vulkan.device.DeviceManager;
 
+import java.util.function.BooleanSupplier;
 import java.util.stream.IntStream;
 
 public abstract class Options {
@@ -77,25 +79,30 @@ public abstract class Options {
             RefreshRate.setNewValue(newRefreshRates[newRefreshRates.length - 1]);
         });
 
+        CyclingOption<Integer> windowMode = (CyclingOption<Integer>) new CyclingOption<>(Component.translatable("nyalkan.options.windowMode"),
+                new Integer[]{WINDOWED, BORDERLESS, FULLSCREEN},
+                value -> {
+                    // f11 returns to windowed
+                    config.windowedFullscreen = value == BORDERLESS;
+                    minecraftOptions.fullscreen().set(value != WINDOWED);
+                    fullscreenDirty = true;
+                },
+                () -> !minecraftOptions.fullscreen().get() ? WINDOWED
+                        : config.windowedFullscreen ? BORDERLESS : FULLSCREEN)
+                .setTranslator(value -> Component.translatable(switch (value) {
+                    case BORDERLESS -> "nyalkan.options.windowMode.borderless";
+                    case FULLSCREEN -> "nyalkan.options.windowMode.fullscreen";
+                    default -> "nyalkan.options.windowMode.windowed";
+                }));
+        BooleanSupplier exclusive = () -> windowMode.getNewValue() == FULLSCREEN;
+        resolutionOption.setEnabled(exclusive);
+        RefreshRate.setEnabled(exclusive);
+
         return new OptionBlock[]{
                 new OptionBlock("", new Option<?>[]{
+                        windowMode,
                         resolutionOption,
                         RefreshRate,
-                        new CyclingOption<>(Component.translatable("nyalkan.options.windowMode"),
-                                new Integer[]{WINDOWED, BORDERLESS, FULLSCREEN},
-                                value -> {
-                                    // f11 returns to windowed
-                                    config.windowedFullscreen = value == BORDERLESS;
-                                    minecraftOptions.fullscreen().set(value != WINDOWED);
-                                    fullscreenDirty = true;
-                                },
-                                () -> !minecraftOptions.fullscreen().get() ? WINDOWED
-                                        : config.windowedFullscreen ? BORDERLESS : FULLSCREEN)
-                                .setTranslator(value -> Component.translatable(switch (value) {
-                                    case BORDERLESS -> "nyalkan.options.windowMode.borderless";
-                                    case FULLSCREEN -> "nyalkan.options.windowMode.fullscreen";
-                                    default -> "nyalkan.options.windowMode.windowed";
-                                })),
                         new RangeOption(Component.translatable("options.framerateLimit"),
                                 10, 260, 10,
                                 value -> Component.nullToEmpty(value == 260 ?
@@ -134,6 +141,11 @@ public abstract class Options {
                                 }),
                                 value -> minecraftOptions.gamma().set(value * 0.01),
                                 () -> (int) (minecraftOptions.gamma().get() * 100.0)),
+                        new RangeOption(Component.translatable("options.accessibility.menu_background_blurriness"),
+                                0, 10, 1,
+                                value -> value == 0 ? Component.translatable("options.off") : Component.literal(String.valueOf(value)),
+                                value -> minecraftOptions.menuBackgroundBlurriness().set(value),
+                                () -> minecraftOptions.menuBackgroundBlurriness().get()),
                 }),
                 new OptionBlock("", new Option<?>[]{
                         new SwitchOption(Component.translatable("options.viewBobbing"),
@@ -149,6 +161,14 @@ public abstract class Options {
                                 () -> minecraftOptions.showAutosaveIndicator().get()),
                 })
         };
+    }
+
+    private static RangeOption percent(String key, OptionInstance<Double> option) {
+        return new RangeOption(Component.translatable(key),
+                0, 100, 5,
+                value -> value == 0 ? Component.translatable("options.off") : Component.literal(value + "%"),
+                value -> option.set(value * 0.01),
+                () -> (int) Math.round(option.get() * 100.0));
     }
 
     // mods may widen these
@@ -238,6 +258,12 @@ public abstract class Options {
                                 },
                                 () -> minecraftOptions.mipmapLevels().get())
                                 .setTranslator(value -> Component.nullToEmpty(value.toString()))
+                }),
+                new OptionBlock("", new Option<?>[]{
+                        percent("options.screenEffectScale", minecraftOptions.screenEffectScale()),
+                        percent("options.fovEffectScale", minecraftOptions.fovEffectScale()),
+                        percent("options.glintSpeed", minecraftOptions.glintSpeed()),
+                        percent("options.glintStrength", minecraftOptions.glintStrength()),
                 })
         };
     }
@@ -372,7 +398,15 @@ public abstract class Options {
                         new SwitchOption(Component.translatable("nyalkan.options.fpsOverlay"),
                                 value -> config.fpsOverlay = value,
                                 () -> config.fpsOverlay)
-                                .setTooltip(Component.translatable("nyalkan.options.fpsOverlay.tooltip"))
+                                .setTooltip(Component.translatable("nyalkan.options.fpsOverlay.tooltip")),
+                        new CyclingOption<>(Component.translatable("nyalkan.options.settingsStyle"),
+                                new Integer[]{SettingsStyle.MODERN, SettingsStyle.CLASSIC},
+                                value -> config.settingsStyle = value,
+                                () -> config.settingsStyle == SettingsStyle.CLASSIC ? SettingsStyle.CLASSIC : SettingsStyle.MODERN)
+                                .setTranslator(value -> Component.translatable(value == SettingsStyle.CLASSIC
+                                        ? "nyalkan.options.settingsStyle.classic"
+                                        : "nyalkan.options.settingsStyle.modern"))
+                                .setTooltip(Component.translatable("nyalkan.options.settingsStyle.tooltip"))
                 })
         };
 
