@@ -25,11 +25,20 @@ public abstract class MSpriteTicker {
     @Shadow @Final SpriteContents.AnimatedTexture animationInfo;
     @Unique private ExtendedSpriteContents nyalkan$contents;
     @Unique private boolean nyalkan$stale;
+    @Unique private int nyalkan$category;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void nyalkan$captureContents(SpriteContents contents, SpriteContents.AnimatedTexture animationInfo,
                                            @Coerce Object interpolationData, CallbackInfo ci) {
         this.nyalkan$contents = (ExtendedSpriteContents) contents;
+        this.nyalkan$category = SpriteUtil.animationCategory(contents.name());
+    }
+
+    // frozen on current frame
+    @Inject(method = "tickAndUpload", at = @At("HEAD"), cancellable = true)
+    private void nyalkan$animationToggle(int x, int y, CallbackInfo ci) {
+        if (!SpriteUtil.animationEnabled(this.nyalkan$category))
+            ci.cancel();
     }
 
     @Inject(method = "tickAndUpload", at = @At("HEAD"), cancellable = true)

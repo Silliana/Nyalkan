@@ -13,6 +13,7 @@ import java.util.List;
 
 // our options as vanilla widgets
 public final class VanillaOptions {
+    private static final String STYLE = "nyalkan.options.settingsStyle";
     private VanillaOptions() {}
 
     public static OptionInstance<?> windowMode() {
@@ -22,6 +23,32 @@ public final class VanillaOptions {
     public static OptionInstance<?>[] nyalkanPage() {
         List<OptionInstance<?>> list = new ArrayList<>();
         for (OptionBlock[] page : List.of(Options.getOptimizationOpts(), Options.getOtherOpts()))
+            for (OptionBlock block : page)
+                for (Option<?> option : block.options())
+                    if (!STYLE.equals(key(option)))
+                        list.add(of(option));
+        return list.toArray(new OptionInstance<?>[0]);
+    }
+
+    public static OptionInstance<?> settingsStyle() {
+        return of(find(Options.getOtherOpts(), STYLE));
+    }
+
+    public static OptionInstance<?>[] overlayPage() {
+        return page(Options.getOverlayOpts());
+    }
+
+    public static OptionInstance<?>[] detailsPage() {
+        return page(Options.getDetailsOpts());
+    }
+
+    public static OptionInstance<?>[] all() {
+        return page(Options.getOptimizationOpts(), Options.getOtherOpts(), Options.getOverlayOpts(), Options.getDetailsOpts());
+    }
+
+    private static OptionInstance<?>[] page(OptionBlock[]... pages) {
+        List<OptionInstance<?>> list = new ArrayList<>();
+        for (OptionBlock[] page : pages)
             for (OptionBlock block : page)
                 for (Option<?> option : block.options())
                     list.add(of(option));

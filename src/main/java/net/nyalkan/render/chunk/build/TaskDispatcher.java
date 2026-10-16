@@ -36,10 +36,15 @@ public class TaskDispatcher {
 
     public void createThreads() {
         // single thread compile
-        int n = Boolean.getBoolean("nyalkan.singleThreadCompile")
-                ? 1
-                : Math.max((Runtime.getRuntime().availableProcessors() - 1) / 2, 1);
+        int configured = Initializer.CONFIG.chunkBuilderThreads;
+        int n = Boolean.getBoolean("nyalkan.singleThreadCompile") ? 1
+                : configured > 0 ? configured
+                : autoThreads();
         createThreads(n);
+    }
+
+    public static int autoThreads() {
+        return Math.max((Runtime.getRuntime().availableProcessors() - 1) / 2, 1);
     }
 
     public void createThreads(int n) {

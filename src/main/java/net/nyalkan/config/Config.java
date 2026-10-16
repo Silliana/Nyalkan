@@ -44,6 +44,22 @@ public class Config {
     public boolean mipmapSpriteFix = true;
     public int device = -1;
     public int settingsStyle = 0;
+    public int chunkBuilderThreads = 0;
+
+    public int fpsOverlayCorner = 0;
+    public boolean fpsOverlayCoords = false;
+
+    public boolean vignette = true;
+    public boolean renderSky = true;
+    public boolean renderSun = true;
+    public boolean renderMoon = true;
+    public boolean renderStars = true;
+    public boolean renderWeather = true;
+    public boolean animateWater = true;
+    public boolean animateLava = true;
+    public boolean animateFire = true;
+    public boolean animatePortal = true;
+    public boolean animateBlocks = true;
 
     public int ambientOcclusion = 1;
 

@@ -51,7 +51,7 @@ public abstract class VideoSettingsScreenM extends OptionsSubScreen {
         SearchableOptionsList list = this.layout.addToContents(new SearchableOptionsList(this.minecraft, this.width, this));
         this.list = list;
         this.addOptions();
-        for (OptionInstance<?> option : VanillaOptions.nyalkanPage())
+        for (OptionInstance<?> option : VanillaOptions.all())
             list.addSearchOnly(option.createButton(this.options));
         list.filter(this.nyalkan$query);
     }

@@ -209,6 +209,8 @@
     "tick.ParticleAccessor",
     "render.vertex.VertexFormatMixin",
 
+    "render.details.GuiDetailsM",
+    "render.details.LevelRendererDetailsM",
     "screen.ScreenM",
     "screen.VideoSettingsScreenM",
 

@@ -18,6 +18,8 @@ import net.nyalkan.config.option.OptionPage;
 import net.nyalkan.config.option.Options;
 import net.nyalkan.vulkan.util.ColorUtil;
 
+import org.apache.commons.lang3.ArrayUtils;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -71,6 +73,12 @@ public class VOptionScreen extends Screen {
         this.optionPages.add(page);
 
         page = new OptionPage(
+                Component.translatable("nyalkan.options.pages.details").getString(),
+                Options.getDetailsOpts()
+        );
+        this.optionPages.add(page);
+
+        page = new OptionPage(
                 Component.translatable("nyalkan.options.pages.optimizations").getString(),
                 Options.getOptimizationOpts()
         );
@@ -78,7 +86,7 @@ public class VOptionScreen extends Screen {
 
         page = new OptionPage(
                 Component.translatable("nyalkan.options.pages.other").getString(),
-                Options.getOtherOpts()
+                ArrayUtils.addAll(Options.getOtherOpts(), Options.getOverlayOpts())
         );
         this.optionPages.add(page);
     }

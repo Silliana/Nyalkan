@@ -10,11 +10,15 @@ import net.nyalkan.config.gui.OptionBlock;
 import net.nyalkan.config.gui.SettingsStyle;
 import net.nyalkan.config.video.VideoModeManager;
 import net.nyalkan.config.video.VideoModeSet;
+import net.nyalkan.render.chunk.build.TaskDispatcher;
 import net.nyalkan.render.chunk.build.light.LightMode;
+import net.nyalkan.render.profiling.FpsOverlay;
 import net.nyalkan.vulkan.Renderer;
 import net.nyalkan.vulkan.device.DeviceManager;
 
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 public abstract class Options {
@@ -271,6 +275,18 @@ public abstract class Options {
     public static OptionBlock[] getOptimizationOpts() {
         return new OptionBlock[]{
                 new OptionBlock("", new Option[]{
+                        new RangeOption(Component.translatable("nyalkan.options.chunkBuilderThreads"),
+                                0, Runtime.getRuntime().availableProcessors(), 1,
+                                value -> value == 0
+                                        ? Component.translatable("nyalkan.options.chunkBuilderThreads.auto", TaskDispatcher.autoThreads())
+                                        : Component.literal(String.valueOf(value)),
+                                value -> {
+                                    config.chunkBuilderThreads = value;
+                                    if (minecraft.level != null)
+                                        minecraft.levelRenderer.allChanged();
+                                },
+                                () -> config.chunkBuilderThreads)
+                                .setTooltip(Component.translatable("nyalkan.options.chunkBuilderThreads.tooltip")),
                         new CyclingOption<>(Component.translatable("nyalkan.options.advCulling"),
                                 new Integer[]{1, 2, 3, 10},
                                 value -> config.advCulling = value,
@@ -395,10 +411,6 @@ public abstract class Options {
                                         DeviceManager.device.deviceName
                                 ))
                         ),
-                        new SwitchOption(Component.translatable("nyalkan.options.fpsOverlay"),
-                                value -> config.fpsOverlay = value,
-                                () -> config.fpsOverlay)
-                                .setTooltip(Component.translatable("nyalkan.options.fpsOverlay.tooltip")),
                         new CyclingOption<>(Component.translatable("nyalkan.options.settingsStyle"),
                                 new Integer[]{SettingsStyle.MODERN, SettingsStyle.CLASSIC},
                                 value -> config.settingsStyle = value,
@@ -410,5 +422,57 @@ public abstract class Options {
                 })
         };
 
+    }
+
+    public static OptionBlock[] getOverlayOpts() {
+        return new OptionBlock[]{
+                new OptionBlock("", new Option[]{
+                        new SwitchOption(Component.translatable("nyalkan.options.fpsOverlay"),
+                                value -> config.fpsOverlay = value,
+                                () -> config.fpsOverlay)
+                                .setTooltip(Component.translatable("nyalkan.options.fpsOverlay.tooltip")),
+                        new CyclingOption<>(Component.translatable("nyalkan.options.fpsOverlay.corner"),
+                                new Integer[]{0, FpsOverlay.RIGHT, FpsOverlay.BOTTOM, FpsOverlay.BOTTOM | FpsOverlay.RIGHT},
+                                value -> config.fpsOverlayCorner = value,
+                                () -> config.fpsOverlayCorner)
+                                .setTranslator(value -> Component.translatable(switch (value) {
+                                    case FpsOverlay.RIGHT -> "nyalkan.options.fpsOverlay.corner.topRight";
+                                    case FpsOverlay.BOTTOM -> "nyalkan.options.fpsOverlay.corner.bottomLeft";
+                                    case FpsOverlay.BOTTOM | FpsOverlay.RIGHT -> "nyalkan.options.fpsOverlay.corner.bottomRight";
+                                    default -> "nyalkan.options.fpsOverlay.corner.topLeft";
+                                })),
+                        new SwitchOption(Component.translatable("nyalkan.options.fpsOverlay.coords"),
+                                value -> config.fpsOverlayCoords = value,
+                                () -> config.fpsOverlayCoords),
+                })
+        };
+    }
+
+    public static OptionBlock[] getDetailsOpts() {
+        return new OptionBlock[]{
+                new OptionBlock("", new Option[]{
+                        toggle("nyalkan.options.vignette", v -> config.vignette = v, () -> config.vignette),
+                }),
+                new OptionBlock("", new Option[]{
+                        toggle("nyalkan.options.sky", v -> config.renderSky = v, () -> config.renderSky),
+                        toggle("nyalkan.options.sun", v -> config.renderSun = v, () -> config.renderSun),
+                        toggle("nyalkan.options.moon", v -> config.renderMoon = v, () -> config.renderMoon),
+                        toggle("nyalkan.options.stars", v -> config.renderStars = v, () -> config.renderStars),
+                        toggle("nyalkan.options.weather", v -> config.renderWeather = v, () -> config.renderWeather)
+                                .setTooltip(Component.translatable("nyalkan.options.weather.tooltip")),
+                }),
+                new OptionBlock("", new Option[]{
+                        toggle("nyalkan.options.animateWater", v -> config.animateWater = v, () -> config.animateWater),
+                        toggle("nyalkan.options.animateLava", v -> config.animateLava = v, () -> config.animateLava),
+                        toggle("nyalkan.options.animateFire", v -> config.animateFire = v, () -> config.animateFire),
+                        toggle("nyalkan.options.animatePortal", v -> config.animatePortal = v, () -> config.animatePortal),
+                        toggle("nyalkan.options.animateBlocks", v -> config.animateBlocks = v, () -> config.animateBlocks)
+                                .setTooltip(Component.translatable("nyalkan.options.animateBlocks.tooltip")),
+                })
+        };
+    }
+
+    private static Option<Boolean> toggle(String key, Consumer<Boolean> setter, Supplier<Boolean> getter) {
+        return new SwitchOption(Component.translatable(key), setter, getter);
     }
 }

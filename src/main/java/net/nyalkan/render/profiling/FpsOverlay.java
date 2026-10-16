@@ -1,5 +1,8 @@
 package net.nyalkan.render.profiling;
 
+import net.minecraft.world.phys.Vec3;
+import net.nyalkan.Initializer;
+import net.nyalkan.config.Config;
 import net.nyalkan.render.Nanos;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -14,6 +17,9 @@ public final class FpsOverlay {
     private static final int SIZE = 8192;
     private static final int COLOR = 0xE0E0E0;
     private static final int BACKGROUND = 0x90505050;
+    // corner bit flags
+    public static final int RIGHT = 1;
+    public static final int BOTTOM = 2;
 
     private static final int[] times = new int[SIZE];
     private static final int[] worst = new int[SIZE / 100 + 1];
@@ -45,10 +51,30 @@ public final class FpsOverlay {
         if (minecraft.options.hideGui || lines.length == 0)
             return;
 
-        int lineHeight = minecraft.font.lineHeight;
-        graphics.fill(1, 1, width + 5, lines.length * lineHeight + 3, BACKGROUND);
+        Config config = Initializer.CONFIG;
+        Font font = minecraft.font;
+        String coords = config.fpsOverlayCoords && minecraft.player != null ? coords(minecraft.player.position()) : null;
+        int rows = lines.length + (coords != null ? 1 : 0);
+        int boxWidth = coords != null ? Math.max(width, font.width(coords)) : width;
+        int boxHeight = rows * font.lineHeight;
+
+        int corner = config.fpsOverlayCorner;
+        int x = (corner & RIGHT) != 0 ? graphics.guiWidth() - boxWidth - 3 : 3;
+        int y = (corner & BOTTOM) != 0 ? graphics.guiHeight() - boxHeight - 3 : 3;
+
+        graphics.fill(x - 2, y - 2, x + boxWidth + 2, y + boxHeight, BACKGROUND);
         for (int i = 0; i < lines.length; i++)
-            graphics.drawString(minecraft.font, lines[i], 3, 3 + i * lineHeight, COLOR, false);
+            graphics.drawString(font, lines[i], x, y + i * font.lineHeight, COLOR, false);
+        if (coords != null)
+            graphics.drawString(font, coords, x, y + lines.length * font.lineHeight, COLOR, false);
+    }
+
+    private static String coords(Vec3 pos) {
+        return "XYZ " + oneDecimal(pos.x) + " / " + oneDecimal(pos.y) + " / " + oneDecimal(pos.z);
+    }
+
+    private static double oneDecimal(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 
     private static void update(Font font) {

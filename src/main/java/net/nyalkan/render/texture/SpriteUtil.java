@@ -1,6 +1,9 @@
 package net.nyalkan.render.texture;
 
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.resources.ResourceLocation;
+import net.nyalkan.Initializer;
+import net.nyalkan.config.Config;
 import net.nyalkan.interfaces.ExtendedSpriteContents;
 import net.nyalkan.vulkan.texture.VulkanImage;
 import org.lwjgl.system.MemoryStack;
@@ -21,6 +24,36 @@ public abstract class SpriteUtil {
 
     public static boolean shouldUpload() {
         return doUpload;
+    }
+
+    public static final int ANIM_WATER = 0;
+    public static final int ANIM_LAVA = 1;
+    public static final int ANIM_FIRE = 2;
+    public static final int ANIM_PORTAL = 3;
+    public static final int ANIM_OTHER = 4;
+
+    public static int animationCategory(ResourceLocation name) {
+        String path = name.getPath();
+        if (path.contains("water"))
+            return ANIM_WATER;
+        if (path.contains("lava"))
+            return ANIM_LAVA;
+        if (path.contains("fire"))
+            return ANIM_FIRE;
+        if (path.contains("portal"))
+            return ANIM_PORTAL;
+        return ANIM_OTHER;
+    }
+
+    public static boolean animationEnabled(int category) {
+        Config config = Initializer.CONFIG;
+        return switch (category) {
+            case ANIM_WATER -> config.animateWater;
+            case ANIM_LAVA -> config.animateLava;
+            case ANIM_FIRE -> config.animateFire;
+            case ANIM_PORTAL -> config.animatePortal;
+            default -> config.animateBlocks;
+        };
     }
 
     public static boolean isAnimated(TextureAtlasSprite sprite) {

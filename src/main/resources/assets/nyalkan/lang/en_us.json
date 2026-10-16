@@ -87,5 +87,34 @@
   "nyalkan.options.settingsStyle.choose": "Pick your settings style",
   "nyalkan.options.settingsStyle.later": "You can switch any time under Settings Style",
   "nyalkan.options.settingsStyle.modern.desc": "One tidy screen with pages and search for every video and Nyalkan setting.",
-  "nyalkan.options.settingsStyle.classic.desc": "The vanilla Video Settings screen, with Nyalkan's options one click away."
+  "nyalkan.options.settingsStyle.classic.desc": "The vanilla Video Settings screen, with Nyalkan's options one click away.",
+
+  "nyalkan.options.pages.details": "Details",
+  "nyalkan.options.pages.overlay": "FPS Overlay",
+  "nyalkan.options.link": "%s...",
+
+  "nyalkan.options.chunkBuilderThreads": "Chunk Builder Threads",
+  "nyalkan.options.chunkBuilderThreads.auto": "Auto (%s)",
+  "nyalkan.options.chunkBuilderThreads.tooltip": "Threads that build chunk meshes. More loads chunks faster but leaves less CPU for the game. Auto uses about half your cores.",
+
+  "nyalkan.options.fpsOverlay.corner": "Overlay Corner",
+  "nyalkan.options.fpsOverlay.corner.topLeft": "Top Left",
+  "nyalkan.options.fpsOverlay.corner.topRight": "Top Right",
+  "nyalkan.options.fpsOverlay.corner.bottomLeft": "Bottom Left",
+  "nyalkan.options.fpsOverlay.corner.bottomRight": "Bottom Right",
+  "nyalkan.options.fpsOverlay.coords": "Show Coordinates",
+
+  "nyalkan.options.vignette": "Vignette",
+  "nyalkan.options.sky": "Sky",
+  "nyalkan.options.sun": "Sun",
+  "nyalkan.options.moon": "Moon",
+  "nyalkan.options.stars": "Stars",
+  "nyalkan.options.weather": "Weather",
+  "nyalkan.options.weather.tooltip": "Rain and snow, including splashes and rain sounds.",
+  "nyalkan.options.animateWater": "Water Animation",
+  "nyalkan.options.animateLava": "Lava Animation",
+  "nyalkan.options.animateFire": "Fire Animation",
+  "nyalkan.options.animatePortal": "Portal Animation",
+  "nyalkan.options.animateBlocks": "Other Animations",
+  "nyalkan.options.animateBlocks.tooltip": "Every other animated texture. Turning animations off also skips their texture uploads."
 }
