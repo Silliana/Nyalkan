@@ -1,6 +1,7 @@
 modLoader="javafml"
 loaderVersion="[4,)"
 license="LGPL-3.0-or-later"
+issueTrackerURL="https://github.com/Silliana/Nyalkan/issues"
 
 [[mixins]]
 config="nyalkan.mixins.json"
@@ -9,10 +10,14 @@ config="nyalkan.mixins.json"
 modId="nyalkan"
 version="${file.jarVersion}"
 displayName="Nyalkan"
+displayURL="https://github.com/Silliana/Nyalkan"
+logoFile="nyalkan_logo.png"
 authors="Silliana"
 credits="Based on VulkanMod by xCollateral (original VulkanMod for Fabric) and contributors"
 description='''
 Vulkan renderer for Minecraft on NeoForge, based on VulkanMod.
+
+If you experienced any issues, report them at https://github.com/Silliana/Nyalkan/issues
 '''
 
 [[dependencies.nyalkan]]
