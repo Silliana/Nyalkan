@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'net.neoforged.moddev' version '2.0.143'
+    id 'maven-publish'
 }
 
 version = project.mod_version
@@ -14,6 +15,7 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
+    withSourcesJar()
 }
 
 neoForge {
@@ -94,12 +96,16 @@ dependencies {
     jarJar("org.lwjgl:lwjgl-vulkan:[$lwjglVersion,)") { version { strictly lwjglVersion } }
     compileOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion")
     runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion")
+
     jarJar("org.lwjgl:lwjgl-vma:[$lwjglVersion,)") { version { strictly lwjglVersion } }
     jarJar("org.lwjgl:lwjgl-shaderc:[$lwjglVersion,)") { version { strictly lwjglVersion } }
+
     compileOnly("org.lwjgl:lwjgl-vma:$lwjglVersion")
     compileOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion")
+
     runtimeOnly("org.lwjgl:lwjgl-vma:$lwjglVersion")
     runtimeOnly("org.lwjgl:lwjgl-shaderc:$lwjglVersion")
+
     compileOnly('foundry.veil:veil-neoforge-1.21.1:4.3.2') { transitive = false }
     compileOnly('software.bernie.geckolib:geckolib-neoforge-1.21.1:4.9.2') { transitive = false }
     shadedNatives("org.lwjgl:lwjgl-vma:$lwjglVersion:$winNatives")
@@ -127,4 +133,23 @@ tasks.named('jar', Jar) {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs << '-Xmaxerrs' << '1000'
+}
+
+tasks.named('sourcesJar', Jar) {
+    destinationDirectory = layout.buildDirectory.dir('sources')
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifactId = 'nyalkan-neoforge-1.21.1'
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'staging'
+            url = providers.gradleProperty('mavenRepo').map { file(it) }.orElse(layout.buildDirectory.dir('maven').get().asFile)
+        }
+    }
 }
